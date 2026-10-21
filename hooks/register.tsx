@@ -6,6 +6,7 @@ import type { Busy, RepoInfo } from '../types'
 const repo = atom({ plugin: 'commit-push', key: 'repo' } as const, null)
 const busy = atom({ plugin: 'commit-push', key: 'busy' } as const, null)
 const note = atom({ plugin: 'commit-push', key: 'note' } as const, null)
+const tasks = atom({ plugin: 'commit-push', key: 'tasks' } as const, [])
 
 // Haiku sees at most this much of the staged diff.
 const DIFF_LIMIT = 60_000
@@ -43,19 +44,52 @@ async function refresh($: EngineInterface) {
     return
   }
 
-  const [head, status, upstream] = await Promise.all([
+  const [head, status, upstream, numstat, heads] = await Promise.all([
     git($, ['rev-parse', '--abbrev-ref', 'HEAD']),
     git($, ['status', '--porcelain']),
     git($, ['rev-list', '--count', '@{u}..HEAD']),
+    // Staged and unstaged changes to tracked files, against the last commit.
+    git($, ['diff', 'HEAD', '--numstat', '--no-color']),
+    git($, ['for-each-ref', '--format=%(refname:short)', 'refs/heads']),
   ])
 
+  let added = 0
+  let removed = 0
+  for (const line of numstat.exitCode === 0 ? numstat.stdout.split('\n') : []) {
+    // Binary files read "-\t-\tpath" and count as no lines.
+    const [plus, minus] = line.split('\t')
+    added += Number(plus) || 0
+    removed += Number(minus) || 0
+  }
+
+  const statusLines = status.stdout.split('\n').filter(line => line.trim())
+  const root = top.stdout.trim().replace(/[\\/]+$/, '')
   const info: RepoInfo = {
+    name: root.slice(Math.max(root.lastIndexOf('/'), root.lastIndexOf('\\')) + 1),
     branch: head.stdout.trim() || '?',
-    changes: status.stdout.split('\n').filter(line => line.trim()).length,
+    branches: heads.stdout.split('\n').map(line => line.trim()).filter(Boolean),
+    changes: statusLines.length,
+    added,
+    removed,
+    untracked: statusLines.filter(line => line.startsWith('??')).length,
     ahead: upstream.exitCode === 0 ? Number(upstream.stdout.trim()) || 0 : 0,
     hasUpstream: upstream.exitCode === 0,
   }
   await update($, repo, () => info)
+}
+
+// What is still running in this session, as words, or null when nothing is.
+async function running($: EngineInterface) {
+  const agents = (await $.agent.list()).filter(
+    agent => agent.status === 'pending' || agent.status === 'running' || agent.status === 'waiting',
+  )
+  const shells = await read($, tasks)
+  const parts = [
+    agents.length ? `${agents.length} subagent${agents.length === 1 ? '' : 's'}` : '',
+    shells.length ? `${shells.length} background task${shells.length === 1 ? '' : 's'}` : '',
+  ].filter(Boolean)
+
+  return parts.length ? `${parts.join(' and ')} running` : null
 }
 
 function lastLine(text: string) {
@@ -86,6 +120,11 @@ async function blocker($: EngineInterface, root: string) {
     return 'detached HEAD; check out a branch first'
   }
 
+  return midOperation($, root)
+}
+
+// Why git is mid-way through something (a rebase, a merge, conflicts), or null when it is not.
+async function midOperation($: EngineInterface, root: string) {
   const gitDir = (await git($, ['rev-parse', '--absolute-git-dir'], { cwd: root })).stdout.trim()
   if ((await exists($, `${gitDir}/rebase-merge`)) || (await exists($, `${gitDir}/rebase-apply`))) {
     return 'a rebase is in progress; finish it in a terminal'
@@ -156,19 +195,22 @@ function leftOut(skipped: string[]) {
   return ` (left out: ${shown}${skipped.length > 3 ? ` and ${skipped.length - 3} more` : ''})`
 }
 
+const DOING = { commit: 'Writing commit message...', push: 'Pushing...', switch: 'Switching branch...' }
+const FAILED = { commit: 'Commit', push: 'Push', switch: 'Branch switch' }
+
 async function run($: EngineInterface, kind: Exclude<Busy, null>, work: () => Promise<string>) {
   if ((await read($, busy)) !== null) {
     return
   }
 
   await update($, busy, () => kind)
-  await update($, note, () => (kind === 'commit' ? 'Writing commit message...' : 'Pushing...'))
+  await update($, note, () => DOING[kind])
 
   let message: string
   try {
     message = await work()
   } catch (err) {
-    message = `${kind === 'commit' ? 'Commit' : 'Push'} failed: ${err instanceof Error ? err.message : String(err)}`
+    message = `${FAILED[kind]} failed: ${err instanceof Error ? err.message : String(err)}`
   }
 
   await update($, note, () => message)
@@ -249,19 +291,105 @@ async function push($: EngineInterface) {
   return `Pushed: ${lastLine(result.stdout) || 'up to date'}`
 }
 
+// Main-loop turns under way (a subagent's turns are counted by running()).
+let turnsRunning = 0
+
+async function switchBranch($: EngineInterface, target: string, isWorking: boolean) {
+  if (isWorking || turnsRunning > 0) {
+    return 'Not switched: wait until Claude has finished'
+  }
+  const busyWith = await running($)
+  if (busyWith) {
+    return `Not switched: ${busyWith}`
+  }
+
+  const root = (await git($, ['rev-parse', '--show-toplevel'])).stdout.trim()
+  const reason = await midOperation($, root)
+  if (reason) {
+    return `Not switched: ${reason}`
+  }
+  const status = await git($, ['status', '--porcelain'], { cwd: root })
+  if (status.stdout.trim()) {
+    return 'Not switched: commit or stash your changes first'
+  }
+
+  const done = await git($, ['switch', target], { cwd: root })
+  if (done.exitCode !== 0) {
+    return `Branch switch failed: ${lastLine(done.stderr || done.stdout)}`
+  }
+
+  return `Switched to ${target}`
+}
+
+// The id of a background task a tool call started, if it started one.
+function startedTask(tool: string, record: unknown) {
+  const r = (record ?? {}) as { backgroundTaskId?: unknown; taskId?: unknown }
+  const id = tool === 'Monitor' ? r.taskId : r.backgroundTaskId
+
+  return typeof id === 'string' && id ? id : null
+}
+
 export const register: Register = on => {
   on('session.start', async ($, e, next) => {
     const result = await next(e)
+    turnsRunning = 0
     await update($, busy, () => null)
+    await update($, tasks, () => [])
     await refresh($)
 
     return result
   })
 
+  on('turn.start', async ($, e, next) => {
+    if (!e.agentId) turnsRunning += 1
+
+    return next(e)
+  })
+
   // The model may have edited or committed files during the turn.
   on('turn.complete', async ($, e, next) => {
     const result = await next(e)
+    if (!(e as { agentId?: string }).agentId) turnsRunning = Math.max(0, turnsRunning - 1)
     await refresh($)
+
+    return result
+  })
+
+  // Background shells and monitors: remembered when started, forgotten when stopped.
+  on('tool.call', async ($, e, next) => {
+    const result = await next(e)
+    if (result.deny !== undefined || result.isError) {
+      return result
+    }
+
+    const tool = String(e.tool)
+    const id = startedTask(tool, result.result)
+    if (id) {
+      await update($, tasks, list => [...(list ?? []), id])
+    }
+    if (tool === 'TaskStop') {
+      const input = e as { task_id?: string; shell_id?: string }
+      const stopped = input.task_id ?? input.shell_id
+      await update($, tasks, list => (list ?? []).filter(t => t !== stopped))
+    }
+
+    return result
+  })
+
+  // A finished task reports back as a notification row naming its id
+  // (a prompt-like row when idle, an attachment when folded into a running turn).
+  on('session.append', async ($, e, next) => {
+    const result = await next(e)
+    const shells = await read($, tasks)
+    if (shells.length === 0 || e.message.role === 'assistant') {
+      return result
+    }
+
+    const text = JSON.stringify(e.message.content)
+    const ended = shells.filter(id => text.includes(`<task-id>${id}</task-id>`) && !/<status>running<\/status>/.test(text))
+    if (ended.length > 0) {
+      await update($, tasks, list => (list ?? []).filter(t => !ended.includes(t)))
+    }
 
     return result
   })
@@ -276,13 +404,35 @@ export const register: Register = on => {
 
     const working = await read($, busy)
     const last = await read($, note)
-    const { Box, Button, Text } = $.ui.resolve(e)
+    const busyWith = e.props.isWorking ? 'Claude is working' : await running($)
+    const canSwitch = !busyWith && working === null && info.branches.length > 1 && e.surface !== 'mobile'
 
-    const summary = [
-      info.branch,
-      info.changes === 1 ? '1 change' : `${info.changes} changes`,
+    const branchPicker =
+      canSwitch && (e.surface === 'terminal' || e.surface === 'desktop' || e.surface === 'vscode')
+        ? (() => {
+            const { Select } = $.ui.resolve(e)
+            const options = info.branches.includes(info.branch) ? info.branches : [info.branch, ...info.branches]
+
+            return (
+              <Select
+                key="commit-push:branch"
+                options={options.map(name => ({ value: name, label: name }))}
+                value={info.branch}
+                onSelect={target => {
+                  if (target !== info.branch) {
+                    void run($, 'switch', () => switchBranch($, target, e.props.isWorking))
+                  }
+                }}
+              />
+            )
+          })()
+        : null
+
+    const { Box, Button, Text } = $.ui.resolve(e)
+    const changes = [
+      info.untracked ? `${info.untracked} new` : '',
       info.hasUpstream ? `${info.ahead} to push` : 'no upstream',
-    ].join(' · ')
+    ].filter(Boolean)
 
     return (
       <Box flexDirection="column">
@@ -299,9 +449,16 @@ export const register: Register = on => {
             label={working === 'push' ? 'Pushing...' : 'Push'}
             onPress={() => run($, 'push', () => push($))}
           />
-          <Text dimColor wrap="truncate-end">
-            {summary}
-            {last ? ` · ${last}` : ''}
+          <Text bold>{info.name}</Text>
+          {branchPicker ?? <Text>⎇ {info.branch}</Text>}
+          <Text wrap="truncate-end">
+            <Text color="success">+{info.added}</Text> <Text color="error">−{info.removed}</Text>
+            <Text dimColor>
+              {' · '}
+              {changes.join(' · ')}
+              {busyWith && info.branches.length > 1 ? ` · branch locked: ${busyWith}` : ''}
+              {last ? ` · ${last}` : ''}
+            </Text>
           </Text>
         </Box>
       </Box>

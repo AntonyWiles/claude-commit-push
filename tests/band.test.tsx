@@ -26,6 +26,9 @@ type Repo = {
   merging?: boolean
   rebasing?: boolean
   below?: string
+  clean?: boolean
+  // Statuses of the session's subagents, changed by a test as it goes.
+  agents?: string[]
 }
 
 // Stands for git, the file system and Haiku beneath the plugin.
@@ -36,8 +39,16 @@ function fakeRepo(on: Parameters<TestBody>[1], repo: Repo = {}) {
 
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('ui.toast', () => ({ value: undefined }))
+  on('agent.list', () => ({
+    value: (repo.agents ?? []).map((status, i) => ({ id: `a${i}`, description: 'look', type: 'Explore', status })),
+  }) as never)
+  on('tool.call', () => ({
+    result: { stdout: '', stderr: '', interrupted: false, backgroundTaskId: 'bg1' },
+  }) as never)
+  // `engine` stands for the engine's own node, which may not sit under a sized Box.
   on('ui.render', ($, e) => {
     const { Box, Text } = $.ui.resolve(e)
+    if (repo.below === 'engine') return { type: 'engine', ref: 0 } as never
     return repo.below ? <Text>{repo.below}</Text> : <Box />
   })
   on('fs.stat', (_, e) => {
@@ -60,7 +71,9 @@ function fakeRepo(on: Parameters<TestBody>[1], repo: Repo = {}) {
     if (args === 'rev-parse --abbrev-ref HEAD') return ok('main\n')
     if (args === 'rev-parse -q --verify MERGE_HEAD') return result(repo.merging ? 0 : 1)
     if (args.startsWith('rev-parse -q --verify')) return result(1)
-    if (args === 'status --porcelain') return ok(' M a.ts\n')
+    if (args === 'status --porcelain') return ok(repo.clean ? '' : ' M a.ts\n?? b.ts\n')
+    if (args === 'diff HEAD --numstat --no-color') return ok('12\t3\ta.ts\n-\t-\tlogo.png\n')
+    if (args === 'for-each-ref --format=%(refname:short) refs/heads') return ok('dev\nmain\n')
     if (args === 'rev-list --count @{u}..HEAD') return ok('1\n')
     if (args === 'ls-files -z --others --exclude-standard') return ok(repo.untracked ?? '')
     if (args === 'diff --cached --stat') return ok(' a.ts | 2 +-\n')
@@ -88,7 +101,7 @@ test('Commit asks Haiku on medium and commits; Push runs the script', async ($, 
 
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...BAND, surface })
-    expect((await ui.find({ type: 'Text', text: /main/ }))?.text).toContain('1 change')
+    expect((await ui.find({ type: 'Text', text: /to push/ }))?.text).toContain('1 new · 1 to push')
     await ui.unmount()
   }
 
@@ -166,4 +179,108 @@ test('outside a git repository the band is left to the others', async ($, on) =>
   expect(await ui.find({ key: 'commit-push:commit' })).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /engine/ })).toBeDefined()
   await ui.unmount()
+})
+
+const SURFACES = ['terminal', 'desktop'] as const
+
+test('the band shows the repo, the branch and a coloured diff count', async ($, on) => {
+  fakeRepo(on)
+  await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
+
+  for (const surface of SURFACES) {
+    const ui = await $.ui.mount({ ...BAND, surface })
+    expect(await ui.find({ type: 'Text', text: /^repo$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^\+12$/ })).toBeDefined()
+    expect(await ui.find({ type: 'Text', text: /^−3$/ })).toBeDefined()
+    expect(await ui.find({ key: 'commit-push:branch' })).toBeDefined()
+    await ui.unmount()
+  }
+})
+
+test('picking a branch switches to it when the tree is clean and nothing runs', async ($, on) => {
+  const { ran } = fakeRepo(on, { clean: true })
+  await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  await ui.select({ key: 'commit-push:branch', value: 'dev' })
+
+  expect(ran.some(argv => argv.join(' ') === 'git switch dev')).toBe(true)
+  expect((await ui.find({ type: 'Text', text: /Switched to dev/ }))?.text).toBeDefined()
+  await ui.unmount()
+})
+
+test('with uncommitted changes the branch is not switched', async ($, on) => {
+  const { ran } = fakeRepo(on)
+  await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  await ui.select({ key: 'commit-push:branch', value: 'dev' })
+
+  expect(ran.some(argv => argv[1] === 'switch')).toBe(false)
+  expect((await ui.find({ type: 'Text', text: /commit or stash/ }))?.text).toBeDefined()
+  await ui.unmount()
+})
+
+test('while Claude works the branch picker is replaced by a lock', async ($, on) => {
+  fakeRepo(on, { clean: true })
+  await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
+
+  for (const surface of SURFACES) {
+    const ui = await $.ui.mount({ ...BAND, surface, props: { ...BAND.props, isWorking: true } })
+    expect(await ui.find({ key: 'commit-push:branch' })).toBeUndefined()
+    expect((await ui.find({ type: 'Text', text: /branch locked: Claude is working/ }))?.text).toBeDefined()
+    await ui.unmount()
+  }
+})
+
+test('a running subagent locks the branch until it finishes', async ($, on) => {
+  const repo: Repo = { clean: true, agents: ['running'] }
+  fakeRepo(on, repo)
+  await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
+
+  let ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await ui.find({ key: 'commit-push:branch' })).toBeUndefined()
+  expect((await ui.find({ type: 'Text', text: /1 subagent running/ }))?.text).toBeDefined()
+  await ui.unmount()
+
+  repo.agents = ['completed']
+  ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await ui.find({ key: 'commit-push:branch' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('a background shell locks the branch until its notification arrives', async ($, on) => {
+  fakeRepo(on, { clean: true })
+  await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
+  await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true } as never)
+
+  let ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await ui.find({ key: 'commit-push:branch' })).toBeUndefined()
+  expect((await ui.find({ type: 'Text', text: /1 background task running/ }))?.text).toBeDefined()
+  await ui.unmount()
+
+  // The notification row the engine appends when the task ends.
+  await $.session.append({
+    door: 'delivery',
+    origin: { kind: 'engine' },
+    uuid: 'u1',
+    message: {
+      type: 'user',
+      role: 'user',
+      isMeta: true,
+      content: [{ type: 'text', text: '<task-notification>\n<task-id>bg1</task-id>\n<status>completed</status>\n</task-notification>' }],
+    },
+  } as never)
+  ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await ui.find({ key: 'commit-push:branch' })).toBeDefined()
+  await ui.unmount()
+})
+
+test('the band draws around the engine’s own node without sizing it', async ($, on) => {
+  fakeRepo(on, { below: 'engine' })
+  await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
+
+  for (const surface of SURFACES) {
+    const ui = await $.ui.mount({ ...BAND, surface })
+    expect(await ui.find({ key: 'commit-push:commit' })).toBeDefined()
+    await ui.unmount()
+  }
 })

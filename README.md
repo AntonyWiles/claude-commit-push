@@ -1,10 +1,27 @@
 # commit-push
 
 A Claude Code mod that puts a **Commit** button and a **Push** button above the prompt in every
-session whose folder is a git repository, with a status line beside them:
-branch · changes · commits to push · last result.
+session whose folder is a git repository, with the repository's name, a branch picker, and a
+diff count beside them:
 
-Windows only for now: Push runs a PowerShell script.
+`[Commit] [Push] my-repo [main ▾] +12 −3 · 1 new · 1 to push · last result`
+
+Lines added since the last commit show in green and lines removed in red (staged and unstaged
+changes to tracked files); new files are counted apart.
+
+Windows only for now: Push runs a PowerShell script. Needs Claude Code 2.1.304 or later.
+
+## Switching branch
+
+The branch picker is shown only while nothing else is going on: Claude is not mid-turn, no
+subagent is running, and no background task (a background shell command or a monitor) started
+this session is still running. Otherwise the branch shows as text with why it is locked. When
+you pick a branch the mod checks all that again, and also refuses while there are uncommitted
+changes ("commit or stash your changes first") or a merge, rebase, cherry-pick or revert is in
+progress. It then runs `git switch <branch>`.
+
+Background tasks are remembered as they start and forgotten when their notification arrives or
+they are stopped through Claude: tasks started before the mod loaded are not known to it.
 
 ## What the buttons do
 
