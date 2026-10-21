@@ -437,6 +437,10 @@ export const register: Register = on => {
     return (
       <Box flexDirection="column">
         {below}
+        {/* a labelled rule, so this row reads apart from the other mods' rows in the band */}
+        <Text dimColor wrap="truncate-end">
+          {`── git ${'─'.repeat(Math.max(0, e.props.bodyColumns - 7))}`}
+        </Text>
         <Box key="commit-push:row" flexDirection="row" gap={1}>
           <Button
             key="commit-push:commit"
