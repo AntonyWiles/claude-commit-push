@@ -1,0 +1,9 @@
+{
+  "name": "commit-push",
+  "version": "0.2.0",
+  "description": "Commit and Push buttons above the prompt in every session: Haiku writes the commit message, a script pushes.",
+  "author": {
+    "name": "AntonyWiles"
+  },
+  "types": "./types/index.d.ts"
+}

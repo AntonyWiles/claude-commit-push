@@ -1,0 +1,6 @@
+{
+  "name": "claude-commit-push",
+  "owner": { "name": "AntonyWiles" },
+  "description": "Commit and Push buttons for Claude Code sessions.",
+  "plugins": [{ "name": "commit-push", "source": "./" }]
+}
