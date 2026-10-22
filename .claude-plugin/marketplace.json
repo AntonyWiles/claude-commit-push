@@ -1,6 +1,6 @@
 {
-  "name": "claude-commit-push",
+  "name": "claude-desktop-mods",
   "owner": { "name": "AntonyWiles" },
-  "description": "Commit and Push buttons for Claude Code sessions.",
-  "plugins": [{ "name": "commit-push", "source": "./" }]
+  "description": "Antony's Claude Code Desktop mods, as one plugin.",
+  "plugins": [{ "name": "desktop-mods", "source": "./" }]
 }
