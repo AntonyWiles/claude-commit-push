@@ -29,7 +29,7 @@ $Plugin = "desktop-mods"
 $Marketplace = "claude-desktop-mods"
 
 function Step($text) { Write-Host "==> $text" -ForegroundColor Cyan }
-function Claude { & claude @args; if ($LASTEXITCODE -ne 0) { throw "claude $($args -join ' ') failed ($LASTEXITCODE)" } }
+function Invoke-Claude { & claude @args; if ($LASTEXITCODE -ne 0) { throw "claude $($args -join ' ') failed ($LASTEXITCODE)" } }
 
 if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
   throw "The claude CLI is not on PATH. Install Claude Code first: winget install Anthropic.ClaudeCode"
@@ -52,7 +52,7 @@ if (-not $KeepOld) {
     $item = Get-Item $link -Force
     if ($item.LinkType) {
       cmd /c rmdir "$link" | Out-Null
-      Write-Host "    removed the usage-meter link in ~/.claude/skills (its folder is untouched: $($item.Target))"
+      Write-Host "    removed the usage-meter link in ~/.claude/skills (the folder it pointed at is untouched)"
     } else {
       Write-Warning "~/.claude/skills/usage-meter is a real folder, not a link: left as is. Move it away so the usage band doesn't draw twice."
     }
@@ -66,14 +66,14 @@ $known = (& claude plugin marketplace list 2>&1) -join "`n"
 if ($known -match [regex]::Escape($Marketplace)) {
   & claude plugin marketplace update $Marketplace | Out-Null
 } else {
-  Claude plugin marketplace add $source
+  Invoke-Claude plugin marketplace add $source
 }
 $installed = (& claude plugin list 2>&1) -join "`n"
 if ($installed -match [regex]::Escape("$Plugin@$Marketplace")) {
   & claude plugin update "$Plugin@$Marketplace"
   & claude plugin enable "$Plugin@$Marketplace" 2>$null | Out-Null
 } else {
-  Claude plugin install "$Plugin@$Marketplace" --scope user
+  Invoke-Claude plugin install "$Plugin@$Marketplace" --scope user
 }
 Write-Host "    source: $source"
 

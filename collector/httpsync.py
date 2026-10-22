@@ -9,7 +9,7 @@ local/collector.json:
   "listen": 8765,                          port to serve on (omit to not serve)
   "token": "<long random string>",         same on every machine
   "allow": ["192.168.1.0/24"],             client subnets (default: the local /24s only)
-  "peers": [{"name": "test-bed", "url": "http://192.168.1.181:8765"}]
+  "peers": [{"name": "laptop", "url": "http://192.168.1.20:8765"}]
 """
 
 from __future__ import annotations
