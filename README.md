@@ -5,7 +5,7 @@ holding four features that each switch on or off:
 
 | Feature | What it does | Option |
 | --- | --- | --- |
-| **Context ring** | A small ring in the prompt footer that fills as the context window does. Full is your auto-compact window (say 400k on a 1M model), or the model's window when auto-compact is off. Hover it for the numbers. The terminal shows `ctx 52%` instead. | `contextRing`, `contextLimit` |
+| **Context ring** | A small ring at the right of the band above the prompt box that fills as the context window does. Full is your auto-compact window (say 400k on a 1M model), or the model's window when auto-compact is off. Hover it for the numbers. The terminal shows `ctx 52%` in its prompt footer instead. | `contextRing`, `contextLimit` |
 | **Git bar** | Commit (Haiku writes the message) and Push buttons, branch picker and diff count above the prompt. | `gitBar` |
 | **Usage meter** | Plan-limit %, tokens and API-equivalent $ in the band above the prompt, and the `/burn` pane. Needs its collector (installed by `deploy\install.ps1`). From [rohit3a/usage-meter](https://github.com/rohit3a/usage-meter). | `usageMeter` |
 | **Next steps** | After each turn, up to three suggested next prompts above the input: press 1, 2 or 3 to put one in the prompt box, 0 to dismiss. From Thariq Shihipar's `next-steps` plugin. | `nextSteps`, `minAnswerChars`, `suggestSkills` |

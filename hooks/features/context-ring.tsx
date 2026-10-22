@@ -125,25 +125,37 @@ export async function sessionEnd($: EngineInterface, e: In<'session.end'>, next:
   return result
 }
 
-// The prompt footer's mode labels: the ring sits before them.
+// The terminal's prompt footer: the fill as one more dim mode label. The
+// desktop app draws no mod content in its footer (only the band above the
+// prompt and panes), so there the ring goes in the band instead.
 export async function renderSessionMode($: EngineInterface, e: MatchedIn<'ui.render', { component: 'SessionMode' }>, next: MatchedNext<'ui.render', { component: 'SessionMode' }>) {
   const f = await read($, fill)
-  if (!f) return next(e)
+  if (!f || e.surface !== 'terminal') return next(e)
 
-  const share = f.tokens / f.limit
-  if (e.surface !== 'desktop') {
-    // The terminal draws no Svg: add the fill as one more dim mode label.
-    return next({ ...e, props: { ...e.props, modes: [`ctx ${Math.round(share * 100)}%`, ...e.props.modes] } })
-  }
+  const pct = Math.round((f.tokens / f.limit) * 100)
 
-  const { Box, Svg } = $.ui.resolve(e)
+  return next({ ...e, props: { ...e.props, modes: [`ctx ${pct}%`, ...e.props.modes] } })
+}
+
+// The band above the prompt, on the surfaces that draw Svg: the ring on a row
+// of its own at the right, nearest the prompt box.
+export async function renderAbovePrompt($: EngineInterface, e: MatchedIn<'ui.render', { component: 'AbovePrompt' }>, next: MatchedNext<'ui.render', { component: 'AbovePrompt' }>) {
   const below = await next(e)
+  const f = await read($, fill)
+  if (!f || e.props.hasSurvey || e.surface === 'terminal') return below
+
+  const els = $.ui.resolve(e)
+  if (!('Svg' in els)) return below
+  const { Box, Svg } = els
   const label = describe(f)
 
+  // The engine's own node (inside `below`) may not sit under a sized Box: size only the ring's row.
   return (
-    <Box flexDirection="row" gap={1} alignItems="center">
-      <Svg source={ringSvg(share, label)} alt={label} width={SIZE} height={SIZE} isInteractive />
+    <Box flexDirection="column">
       {below}
+      <Box flexDirection="row" width={e.props.bodyColumns} justifyContent="flex-end">
+        <Svg source={ringSvg(f.tokens / f.limit, label)} alt={label} width={SIZE} height={SIZE} isInteractive />
+      </Box>
     </Box>
   )
 }

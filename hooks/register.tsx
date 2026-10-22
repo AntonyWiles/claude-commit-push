@@ -2,6 +2,7 @@ import type { Register } from 'claude-code'
 
 import {
   configure as configureRing,
+  renderAbovePrompt as ringRenderAbovePrompt,
   renderSessionMode as ringRenderSessionMode,
   sessionEnd as ringSessionEnd,
   sessionMeasure as ringSessionMeasure,
@@ -43,7 +44,7 @@ import {
 // feature's as its `next`, the last one the engine's. A feature that is off
 // passes straight through. In the band above the prompt each hook draws what
 // is beneath it and then its own rows, so the first in a chain draws lowest:
-// next steps sit closest to the prompt, git above them, usage on top.
+// the context ring sits closest to the prompt, then next steps, git, and usage on top.
 export const register: Register = (on, options) => {
   const isOn = (name: string) => options?.[name] !== false
   const ring = isOn('contextRing')
@@ -104,8 +105,9 @@ export const register: Register = (on, options) => {
   on('ui.render', { component: 'AbovePrompt' }, ($, e, next) => {
     const toUsage = (ev: typeof e) => (usage ? usageRenderAbovePrompt($, ev, next) : next(ev))
     const toGit = (ev: typeof e) => (git ? gitRenderAbovePrompt($, ev, toUsage as never) : toUsage(ev))
+    const toSteps = (ev: typeof e) => (steps ? nextRenderAbovePrompt($, ev, toGit as never) : toGit(ev))
 
-    return steps ? nextRenderAbovePrompt($, e, toGit as never) : toGit(e)
+    return ring ? ringRenderAbovePrompt($, e, toSteps as never) : toSteps(e)
   })
 
   on('ui.render', { component: 'SessionMode' }, ($, e, next) => (ring ? ringRenderSessionMode($, e, next) : next(e)))

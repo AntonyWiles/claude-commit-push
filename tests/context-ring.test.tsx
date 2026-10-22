@@ -8,6 +8,14 @@ const FOOTER = {
   props: { modes: ['auto'] },
 } as const
 
+// The desktop app draws mod content only in the band above the prompt and in panes.
+const BAND = {
+  plugin: 'desktop-mods',
+  component: 'AbovePrompt',
+  requestId: 'band',
+  props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 80, scroll: { offset: 0, bodyRows: 10 }, view: {} },
+} as const
+
 // The context ring alone: the mod's other features are switched off.
 const ONLY = { options: { usageMeter: false, nextSteps: false, gitBar: false } }
 
@@ -37,7 +45,8 @@ function fakeEngine(on: Parameters<TestBody>[1], compactAt: number | null = 400_
   }) as never)
   on('ui.render', ($, e) => {
     const { Text } = $.ui.resolve(e)
-    return <Text>{`modes: ${(e.props as { modes: string[] }).modes.join(' & ')}`}</Text>
+    const modes = (e.props as { modes?: string[] }).modes
+    return <Text>{modes ? `modes: ${modes.join(' & ')}` : 'engine band'}</Text>
   })
 }
 
@@ -48,13 +57,13 @@ test('the ring is full at the auto-compact window, not the model window', ONLY, 
   await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
   await $.session.measure(measure(200_000) as never)
 
-  const ui = await $.ui.mount({ ...FOOTER, surface: 'desktop' })
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   const ring = await ui.find({ type: 'Svg' })
   expect(ring?.props.alt).toBe('Context 200k of 400k (50%) · auto-compact window · model window 1M')
   // half of the ring's circumference is drawn
   expect(String(ring?.props.source)).toContain('stroke-dasharray="21.21 42.41"')
-  // the engine's own mode labels still draw beside it
-  expect((await ui.find({ type: 'Text', text: /modes:/ }))?.text).toBe('modes: auto')
+  // what the engine and the mods beneath drew in the band still draws above it
+  expect((await ui.find({ type: 'Text', text: /engine band/ }))?.text).toBe('engine band')
   await ui.unmount()
 })
 
@@ -63,7 +72,7 @@ test('the ring follows the window as it fills, and turns red near the limit', ON
   await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
   await $.session.measure(measure(360_000) as never)
 
-  const ui = await $.ui.mount({ ...FOOTER, surface: 'desktop' })
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   const ring = await ui.find({ type: 'Svg' })
   expect(ring?.props.alt).toContain('(90%)')
   expect(String(ring?.props.source)).toContain('#e5534b')
@@ -74,7 +83,7 @@ test('a fresh session draws an empty ring', ONLY, async ($, on) => {
   fakeEngine(on)
   await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
 
-  const ui = await $.ui.mount({ ...FOOTER, surface: 'desktop' })
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect((await ui.find({ type: 'Svg' }))?.props.alt).toContain('Context 0 of 400k (0%)')
   await ui.unmount()
 })
@@ -84,7 +93,7 @@ test('with auto-compact off the ring is full at the model window', ONLY, async (
   await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
   await $.session.measure(measure(250_000) as never)
 
-  const ui = await $.ui.mount({ ...FOOTER, surface: 'desktop' })
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect((await ui.find({ type: 'Svg' }))?.props.alt).toBe('Context 250k of 1M (25%)')
   await ui.unmount()
 })
@@ -94,7 +103,7 @@ test('the contextLimit option sets the full mark', { options: { ...ONLY.options,
   await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
   await $.session.measure(measure(250_000) as never)
 
-  const ui = await $.ui.mount({ ...FOOTER, surface: 'desktop' })
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect((await ui.find({ type: 'Svg' }))?.props.alt).toBe('Context 250k of 500k (50%) · model window 1M')
   await ui.unmount()
 })
@@ -109,7 +118,18 @@ test('the terminal, which draws no Svg, gets a mode label instead', ONLY, async 
   await ui.unmount()
 })
 
-test('switched off, the footer is the engine\'s own', { options: { ...ONLY.options, contextRing: false } }, async ($, on) => {
+test('switched off, the band is left to the others', { options: { ...ONLY.options, contextRing: false } }, async ($, on) => {
+  fakeEngine(on)
+  await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
+  await $.session.measure(measure(100_000) as never)
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await ui.find({ type: 'Svg' })).toBeUndefined()
+  expect((await ui.find({ type: 'Text', text: /engine band/ }))?.text).toBe('engine band')
+  await ui.unmount()
+})
+
+test('the desktop footer is left as the engine draws it', ONLY, async ($, on) => {
   fakeEngine(on)
   await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
   await $.session.measure(measure(100_000) as never)
@@ -117,5 +137,15 @@ test('switched off, the footer is the engine\'s own', { options: { ...ONLY.optio
   const ui = await $.ui.mount({ ...FOOTER, surface: 'desktop' })
   expect(await ui.find({ type: 'Svg' })).toBeUndefined()
   expect((await ui.find({ type: 'Text', text: /modes:/ }))?.text).toBe('modes: auto')
+  await ui.unmount()
+})
+
+test('the terminal band has no ring: its footer label stands in', ONLY, async ($, on) => {
+  fakeEngine(on)
+  await $.session.start({ cwd: 'C:/repo', surface: 'terminal', isInteractive: true })
+  await $.session.measure(measure(100_000) as never)
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'terminal' })
+  expect(await ui.find({ type: 'Svg' })).toBeUndefined()
   await ui.unmount()
 })

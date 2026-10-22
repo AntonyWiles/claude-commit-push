@@ -8,7 +8,7 @@ const result = (exitCode: number, stdout = '') => ({
   value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false },
 })
 
-test('git bar, next steps and context ring share the band and footer', OPTIONS, async ($, on) => {
+test('git bar, next steps and context ring share the band', OPTIONS, async ($, on) => {
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('session.measure', (_, e) => ({ changed: [...e.changed] }))
   on('session.usage', (_, e) => ({
@@ -43,9 +43,6 @@ test('git bar, next steps and context ring share the band and footer', OPTIONS, 
   } as never)
   expect(await band.find({ key: 'commit-push:commit' })).toBeDefined()
   expect((await band.find({ type: 'Text', text: /engine/ }))?.text).toBe('engine')
+  expect((await band.find({ type: 'Svg' }))?.props.alt).toContain('Context 100k of 400k (25%)')
   await band.unmount()
-
-  const footer = await $.ui.mount({ plugin: 'desktop-mods', component: 'SessionMode', requestId: 'footer', surface: 'desktop', props: { modes: [] } } as never)
-  expect((await footer.find({ type: 'Svg' }))?.props.alt).toContain('Context 100k of 400k (25%)')
-  await footer.unmount()
 })
