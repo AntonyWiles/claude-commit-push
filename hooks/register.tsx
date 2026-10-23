@@ -23,6 +23,11 @@ import {
   turnStart as nextTurnStart,
 } from './features/next-steps'
 import {
+  runArchive,
+  sessionAppend as archiveSessionAppend,
+  sessionStart as archiveSessionStart,
+} from './features/session-archive'
+import {
   agentSpawn as usageAgentSpawn,
   renderAbovePrompt as usageRenderAbovePrompt,
   renderPane as usageRenderPane,
@@ -36,7 +41,7 @@ import {
   turnStep as usageTurnStep,
 } from './features/usage-meter'
 
-// One mod, four features, each switched on or off in the mod's options (the
+// One mod, five features, each switched on or off in the mod's options (the
 // config menu, or `pluginConfigs` in settings); a change reloads the module.
 //
 // A module hooks each event once, so where several features hook the same
@@ -45,12 +50,14 @@ import {
 // passes straight through. In the band above the prompt each hook draws what
 // is beneath it and then its own rows, so the first in a chain draws lowest:
 // the context ring sits closest to the prompt, then next steps, git, and usage on top.
+// The session archive draws nothing; it records each row once it is stored.
 export const register: Register = (on, options) => {
   const isOn = (name: string) => options?.[name] !== false
   const ring = isOn('contextRing')
   const git = isOn('gitBar')
   const usage = isOn('usageMeter')
   const steps = isOn('nextSteps')
+  const archive = isOn('sessionArchive')
 
   configureRing(options)
   configureNext(options)
@@ -58,8 +65,9 @@ export const register: Register = (on, options) => {
   on('session.start', ($, e, next) => {
     const toRing = (ev: typeof e) => (ring ? ringSessionStart($, ev, next) : next(ev))
     const toUsage = (ev: typeof e) => (usage ? usageSessionStart($, ev, toRing as never) : toRing(ev))
+    const toGit = (ev: typeof e) => (git ? gitSessionStart($, ev, toUsage as never) : toUsage(ev))
 
-    return git ? gitSessionStart($, e, toUsage as never) : toUsage(e)
+    return archive ? archiveSessionStart($, e, toGit as never) : toGit(e)
   })
 
   on('session.end', ($, e, next) => {
@@ -74,7 +82,11 @@ export const register: Register = (on, options) => {
     return usage ? usageSessionMeasure($, e, toRing as never) : toRing(e)
   })
 
-  on('session.append', ($, e, next) => (git ? gitSessionAppend($, e, next) : next(e)))
+  on('session.append', ($, e, next) => {
+    const toGit = (ev: typeof e) => (git ? gitSessionAppend($, ev, next) : next(ev))
+
+    return archive ? archiveSessionAppend($, e, toGit as never) : toGit(e)
+  })
 
   on('turn.start', ($, e, next) => {
     const toUsage = (ev: typeof e) => (usage ? usageTurnStart($, ev, next) : next(ev))
@@ -115,5 +127,9 @@ export const register: Register = (on, options) => {
   if (usage) {
     on('ui.render', { component: 'Pane', requestId: 'usage-meter' }, ($, e) => usageRenderPane($, e))
     on('command.run', { command: 'burn' }, ($, e) => usageRunBurn($, e))
+  }
+
+  if (archive) {
+    on('command.run', { command: 'archive' }, ($, e) => runArchive($, e))
   }
 }

@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- New: the session archive. Every session's conversation is saved as it happens to
+  `%USERPROFILE%\claude-session-archive\<session id>\` (`meta.json` and `rows-NNNN.jsonl`),
+  for turning repeated work into skills later. `/archive` shows where; `sessionArchive` turns it off.
+
 ## 1.0.1 - 2026-10-23
 
 - The context ring now draws in the band above the prompt on desktop: the desktop app draws mod

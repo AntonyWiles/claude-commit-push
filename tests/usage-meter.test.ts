@@ -7,7 +7,7 @@ const MIN = 60_000
 const HOUR = 60 * MIN
 const ROOT = '/home/t/.claude/usage-meter'
 // The usage meter alone: the mod's other features are switched off.
-const ONLY = { options: { gitBar: false, nextSteps: false, contextRing: false } }
+const ONLY = { options: { gitBar: false, nextSteps: false, contextRing: false, sessionArchive: false } }
 
 const row = (label: string, usd: number, extra: Record<string, unknown> = {}) => ({
   label,

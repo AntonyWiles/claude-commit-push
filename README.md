@@ -1,7 +1,7 @@
 # claude-desktop-mods
 
 One mod for Claude Code on Windows (the desktop app's Code tab and the terminal),
-holding four features that each switch on or off:
+holding five features that each switch on or off:
 
 | Feature | What it does | Option |
 | --- | --- | --- |
@@ -9,6 +9,7 @@ holding four features that each switch on or off:
 | **Git bar** | Commit (Haiku writes the message) and Push buttons, branch picker and diff count above the prompt. | `gitBar` |
 | **Usage meter** | Plan-limit %, tokens and API-equivalent $ in the band above the prompt, and the `/burn` pane. Needs its collector (installed by `deploy\install.ps1`). From [rohit3a/usage-meter](https://github.com/rohit3a/usage-meter). | `usageMeter` |
 | **Next steps** | After each turn, up to three suggested next prompts above the input: press 1, 2 or 3 to put one in the prompt box, 0 to dismiss. From Thariq Shihipar's `next-steps` plugin. | `nextSteps`, `minAnswerChars`, `suggestSkills` |
+| **Session archive** | Saves every session's conversation as it happens to `%USERPROFILE%\claude-session-archive\<session id>\`: `meta.json` (folder, model, start time) and `rows-NNNN.jsonl`, one line per prompt, response, tool call and result, subagents' included. Long text is cut at 20,000 characters and images are left out. `/archive` shows where the current session goes. For reading back later, to turn repeated work into skills. | `sessionArchive` |
 
 ## Install
 
@@ -70,6 +71,7 @@ claude plugin configure desktop-mods@claude-desktop-mods          # show them
 | `nextSteps` | `true` | next-step suggestions |
 | `minAnswerChars` | `80` | no suggestions after answers shorter than this |
 | `suggestSkills` | `true` | let suggestions name your skills and slash commands |
+| `sessionArchive` | `true` | the session archive and `/archive` |
 
 ## Updating
 
@@ -82,7 +84,7 @@ claude plugin configure desktop-mods@claude-desktop-mods          # show them
 ```
 .claude-plugin/        plugin.json (name, version, options) and marketplace.json
 hooks/register.tsx     the one hooks module: chains every feature's hooks per event
-hooks/features/        context-ring, git-bar, next-steps, usage-meter
+hooks/features/        context-ring, git-bar, next-steps, usage-meter, session-archive
 hooks/hook-types.ts    parameter types for hooks written as function declarations
 types/index.d.ts       the $.state contract for every feature
 collector/             the usage meter's collector (Python), prices.json beside it

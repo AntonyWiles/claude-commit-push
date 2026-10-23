@@ -1,8 +1,8 @@
 import { expect, test } from 'claude-code/testing'
 
-// Every feature but the usage meter (which needs its collector's files): the
-// band and the footer carry each feature's part at once.
-const OPTIONS = { options: { usageMeter: false } }
+// Every feature that draws but the usage meter (which needs its collector's
+// files): the band and the footer carry each feature's part at once.
+const OPTIONS = { options: { usageMeter: false, sessionArchive: false } }
 
 const result = (exitCode: number, stdout = '') => ({
   value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false },
