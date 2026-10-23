@@ -2,7 +2,7 @@ import { expect, test } from 'claude-code/testing'
 import type { TestBody } from 'claude-code/testing'
 
 const BAND = {
-  plugin: 'commit-push',
+  plugin: 'desktop-mods',
   component: 'AbovePrompt',
   requestId: 'band',
   props: {
@@ -19,6 +19,9 @@ const result = (exitCode: number, stdout = '') => ({
   value: { exitCode, stdout, stderr: '', isStdoutTruncated: false, isStderrTruncated: false },
 })
 const ok = (stdout = '') => result(0, stdout)
+
+// The git bar alone: the mod's other features are switched off.
+const ONLY = { options: { usageMeter: false, nextSteps: false, contextRing: false } }
 
 type Repo = {
   untracked?: string
@@ -95,7 +98,7 @@ function fakeRepo(on: Parameters<TestBody>[1], repo: Repo = {}) {
   return { ran, stdins, asked }
 }
 
-test('Commit asks Haiku on medium and commits; Push runs the script', async ($, on) => {
+test('Commit asks Haiku on medium and commits; Push runs the script', ONLY, async ($, on) => {
   const { ran, stdins, asked } = fakeRepo(on)
   await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
 
@@ -122,7 +125,7 @@ test('Commit asks Haiku on medium and commits; Push runs the script', async ($, 
   await ui.unmount()
 })
 
-test('secret-looking and large new files are left out of a commit', async ($, on) => {
+test('secret-looking and large new files are left out of a commit', ONLY, async ($, on) => {
   const { stdins } = fakeRepo(on, {
     untracked: 'src/new.ts\0.env\0keys/server.pem\0.env.example\0video.mp4\0',
     sizes: { 'new.ts': 100, '.env.example': 50, 'video.mp4': 50 * 1024 * 1024 },
@@ -141,7 +144,7 @@ for (const [what, repo] of [
   ['merge', { merging: true }],
   ['rebase', { rebasing: true }],
 ] as const) {
-  test(`Commit refuses during a ${what} and stages nothing`, async ($, on) => {
+  test(`Commit refuses during a ${what} and stages nothing`, ONLY, async ($, on) => {
     const { ran, asked } = fakeRepo(on, repo)
     await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
@@ -154,7 +157,7 @@ for (const [what, repo] of [
   })
 }
 
-test('the band keeps what other mods drew', async ($, on) => {
+test('the band keeps what other mods drew', ONLY, async ($, on) => {
   fakeRepo(on, { below: 'other mod' })
   await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
 
@@ -166,7 +169,7 @@ test('the band keeps what other mods drew', async ($, on) => {
   }
 })
 
-test('outside a git repository the band is left to the others', async ($, on) => {
+test('outside a git repository the band is left to the others', ONLY, async ($, on) => {
   on('session.start', (_, e) => ({ cwd: e.cwd }))
   on('process.run', () => result(128))
   on('ui.render', ($, e) => {
@@ -183,7 +186,7 @@ test('outside a git repository the band is left to the others', async ($, on) =>
 
 const SURFACES = ['terminal', 'desktop'] as const
 
-test('the band shows the repo, the branch and a coloured diff count', async ($, on) => {
+test('the band shows the repo, the branch and a coloured diff count', ONLY, async ($, on) => {
   fakeRepo(on)
   await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
 
@@ -197,7 +200,7 @@ test('the band shows the repo, the branch and a coloured diff count', async ($, 
   }
 })
 
-test('picking a branch switches to it when the tree is clean and nothing runs', async ($, on) => {
+test('picking a branch switches to it when the tree is clean and nothing runs', ONLY, async ($, on) => {
   const { ran } = fakeRepo(on, { clean: true })
   await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
@@ -208,7 +211,7 @@ test('picking a branch switches to it when the tree is clean and nothing runs', 
   await ui.unmount()
 })
 
-test('with uncommitted changes the branch is not switched', async ($, on) => {
+test('with uncommitted changes the branch is not switched', ONLY, async ($, on) => {
   const { ran } = fakeRepo(on)
   await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
@@ -219,7 +222,7 @@ test('with uncommitted changes the branch is not switched', async ($, on) => {
   await ui.unmount()
 })
 
-test('while Claude works the branch picker is replaced by a lock', async ($, on) => {
+test('while Claude works the branch picker is replaced by a lock', ONLY, async ($, on) => {
   fakeRepo(on, { clean: true })
   await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
 
@@ -231,7 +234,7 @@ test('while Claude works the branch picker is replaced by a lock', async ($, on)
   }
 })
 
-test('a running subagent locks the branch until it finishes', async ($, on) => {
+test('a running subagent locks the branch until it finishes', ONLY, async ($, on) => {
   const repo: Repo = { clean: true, agents: ['running'] }
   fakeRepo(on, repo)
   await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
@@ -247,7 +250,7 @@ test('a running subagent locks the branch until it finishes', async ($, on) => {
   await ui.unmount()
 })
 
-test('a background shell locks the branch until its notification arrives', async ($, on) => {
+test('a background shell locks the branch until its notification arrives', ONLY, async ($, on) => {
   fakeRepo(on, { clean: true })
   await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
   await $.tool.call({ tool: 'Bash', command: 'npm run dev', run_in_background: true } as never)
@@ -274,7 +277,7 @@ test('a background shell locks the branch until its notification arrives', async
   await ui.unmount()
 })
 
-test('the band draws around the engine’s own node without sizing it', async ($, on) => {
+test('the band draws around the engine’s own node without sizing it', ONLY, async ($, on) => {
   fakeRepo(on, { below: 'engine' })
   await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
 

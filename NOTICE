@@ -1,0 +1,14 @@
+This repository includes code from other projects, each under the MIT License:
+
+- hooks/features/usage-meter.tsx, collector/, prices.json, deploy/run_hidden.pyw,
+  tests/usage-meter.test.ts
+  From usage-meter by Rohit, https://github.com/rohit3a/usage-meter
+  (upstream commit cc0e64e, plus a local Windows port). Licence: licenses/usage-meter.LICENSE
+
+- hooks/features/next-steps.tsx
+  From next-steps 1.0.0 by Thariq Shihipar, in anthropics/claude-plugins-community.
+  Licence: MIT, as declared in that plugin's manifest.
+
+Changes made here: state keys moved under the combined plugin name `desktop-mods`,
+hooks exported as functions and chained in hooks/register.tsx, and the collector's
+prices.json path moved to the repository root.

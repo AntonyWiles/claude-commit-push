@@ -1,9 +1,60 @@
 {
-  "name": "commit-push",
-  "version": "0.3.2",
-  "description": "Commit and Push buttons above the prompt in every session: Haiku writes the commit message, a script pushes.",
-  "author": {
-    "name": "AntonyWiles"
-  },
-  "types": "./types/index.d.ts"
+  "name": "desktop-mods",
+  "version": "1.0.0",
+  "description": "Antony's Claude Code Desktop mods in one: context ring in the prompt footer, git Commit/Push bar, usage meter, and next-step suggestions.",
+  "author": { "name": "AntonyWiles", "url": "https://github.com/AntonyWiles" },
+  "repository": "https://github.com/AntonyWiles/claude-desktop-mods",
+  "license": "MIT",
+  "types": "./types/index.d.ts",
+  "userConfig": {
+    "contextRing": {
+      "type": "boolean",
+      "title": "Context ring",
+      "description": "Draw the context window's fill as a ring in the prompt footer.",
+      "required": false,
+      "default": true
+    },
+    "contextLimit": {
+      "type": "number",
+      "title": "Context ring full at (tokens)",
+      "description": "Tokens at which the ring is full. 0 uses the auto-compact window, or the model's window when auto-compact is off.",
+      "required": false,
+      "default": 0
+    },
+    "gitBar": {
+      "type": "boolean",
+      "title": "Git bar",
+      "description": "Commit and Push buttons, branch picker and diff count above the prompt.",
+      "required": false,
+      "default": true
+    },
+    "usageMeter": {
+      "type": "boolean",
+      "title": "Usage meter",
+      "description": "Plan-limit %, tokens and $ in the band and the /burn pane. Needs the collector (deploy/install.ps1).",
+      "required": false,
+      "default": true
+    },
+    "nextSteps": {
+      "type": "boolean",
+      "title": "Next-step suggestions",
+      "description": "After each turn, suggest up to three next prompts above the input.",
+      "required": false,
+      "default": true
+    },
+    "minAnswerChars": {
+      "type": "number",
+      "title": "Shortest answer to suggest after",
+      "description": "Skip next-step suggestions after answers shorter than this many characters.",
+      "required": false,
+      "default": 80
+    },
+    "suggestSkills": {
+      "type": "boolean",
+      "title": "Suggest skills and slash commands",
+      "description": "Tell the next-step suggester which skills and slash commands this session has.",
+      "required": false,
+      "default": true
+    }
+  }
 }
