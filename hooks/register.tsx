@@ -1,15 +1,17 @@
 import type { Register } from 'claude-code'
 
+import { drawBand } from './band'
+
 import {
   configure as configureRing,
-  renderAbovePrompt as ringRenderAbovePrompt,
+  bandRing,
   renderSessionMode as ringRenderSessionMode,
   sessionEnd as ringSessionEnd,
   sessionMeasure as ringSessionMeasure,
   sessionStart as ringSessionStart,
 } from './features/context-ring'
 import {
-  renderAbovePrompt as gitRenderAbovePrompt,
+  bandSection as gitBandSection,
   sessionAppend as gitSessionAppend,
   sessionStart as gitSessionStart,
   toolCall as gitToolCall,
@@ -18,7 +20,7 @@ import {
 } from './features/git-bar'
 import {
   configure as configureNext,
-  renderAbovePrompt as nextRenderAbovePrompt,
+  bandSection as nextBandSection,
   turnComplete as nextTurnComplete,
   turnStart as nextTurnStart,
 } from './features/next-steps'
@@ -29,7 +31,7 @@ import {
 } from './features/session-archive'
 import {
   agentSpawn as usageAgentSpawn,
-  renderAbovePrompt as usageRenderAbovePrompt,
+  bandSection as usageBandSection,
   renderPane as usageRenderPane,
   runBurn as usageRunBurn,
   sessionEnd as usageSessionEnd,
@@ -47,10 +49,10 @@ import {
 // A module hooks each event once, so where several features hook the same
 // event they are chained here by hand: each feature's hook gets the next
 // feature's as its `next`, the last one the engine's. A feature that is off
-// passes straight through. In the band above the prompt each hook draws what
-// is beneath it and then its own rows, so the first in a chain draws lowest:
-// the context ring sits closest to the prompt, then next steps, git, and usage on top.
-// The session archive draws nothing; it records each row once it is stored.
+// passes straight through. The band above the prompt is drawn once, by
+// hooks/band.tsx: each feature hands it a section (usage, git, next, top to
+// bottom) and the context ring closes the first row. The session archive
+// draws nothing; it records each row once it is stored.
 export const register: Register = (on, options) => {
   const isOn = (name: string) => options?.[name] !== false
   const ring = isOn('contextRing')
@@ -114,12 +116,19 @@ export const register: Register = (on, options) => {
     return usage ? yield* usageTurnStep($, e, next) : yield* next(e)
   })
 
-  on('ui.render', { component: 'AbovePrompt' }, ($, e, next) => {
-    const toUsage = (ev: typeof e) => (usage ? usageRenderAbovePrompt($, ev, next) : next(ev))
-    const toGit = (ev: typeof e) => (git ? gitRenderAbovePrompt($, ev, toUsage as never) : toUsage(ev))
-    const toSteps = (ev: typeof e) => (steps ? nextRenderAbovePrompt($, ev, toGit as never) : toGit(ev))
+  on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
+    const below = await next(e)
+    if (e.props.hasSurvey) return below
 
-    return ring ? ringRenderAbovePrompt($, e, toSteps as never) : toSteps(e)
+    const [usageRows, gitRows, nextRows, ringMark] = await Promise.all([
+      usage ? usageBandSection($, e) : null,
+      git ? gitBandSection($, e) : null,
+      steps ? nextBandSection($, e) : null,
+      ring ? bandRing($, e) : null,
+    ])
+    const sections = [usageRows, gitRows, nextRows].filter(section => section !== null)
+
+    return drawBand($, e, below, sections, ringMark)
   })
 
   on('ui.render', { component: 'SessionMode' }, ($, e, next) => (ring ? ringRenderSessionMode($, e, next) : next(e)))

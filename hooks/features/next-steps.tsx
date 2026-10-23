@@ -11,9 +11,11 @@
 // The fork is also handed the session's skills and slash commands
 // ($.command.list), so a suggestion can be "/skill arguments".
 
-import type { CommandInfo, EngineInterface, PluginOptions, RenderElement } from 'claude-code'
+import type { CommandInfo, EngineInterface, PluginOptions } from 'claude-code'
 
-import type { In, MatchedIn, MatchedNext, NextOf } from '../hook-types'
+import { contentColumns } from '../band'
+import type { BandIn, Section } from '../band'
+import type { In, NextOf } from '../hook-types'
 
 type Suggestion = { label: string; prompt: string }
 
@@ -190,47 +192,72 @@ export async function turnComplete($: EngineInterface, e: In<'turn.complete'>, n
   return result
 }
 
-export async function renderAbovePrompt($: EngineInterface, e: MatchedIn<'ui.render', { component: 'AbovePrompt' }>, next: MatchedNext<'ui.render', { component: 'AbovePrompt' }>): Promise<RenderElement> {
-  const below = await next(e)
-  if (e.props.hasSurvey || e.props.isWorking || view.kind === 'hidden') return below
+// The longest preview, in rows; a longer prompt is cut there.
+const PREVIEW_ROWS = 4
+
+// The next section of the band: the suggestions as 1/2/3 buttons, and under
+// them a preview area where the full prompt of the one under the pointer
+// shows. Each preview is drawn hidden inside its suggestion's row and placed
+// down over the area: the band keys every row, so the surface reveals it
+// while the pointer is on that row, with no hook run. The area keeps its
+// height whichever is shown, so nothing in the band moves as the pointer does.
+export async function bandSection($: EngineInterface, e: BandIn): Promise<Section | null> {
+  if (e.props.isWorking || view.kind === 'hidden') return null
   const { Box, Text, Button } = $.ui.resolve(e)
 
   if (view.kind === 'loading') {
-    return (
-      <Box flexDirection="column">
-        {below}
-        <Box marginTop={1}>
-          <Text dimColor>next steps…</Text>
-        </Box>
-      </Box>
-    )
+    return { label: 'next', rows: [<Text dimColor>thinking of next steps…</Text>] }
   }
 
   const items = view.items
-  return (
-    <Box flexDirection="column">
-      {below}
-      <Box marginTop={1} />
-      <Text dimColor>next:</Text>
-      {items.map((item, index) => (
-        <Box key={`s${index}`} marginLeft={2}>
-          <Button
-            hotkey={String(index + 1)}
-            plain
-            label={item.label}
-            onPress={() => {
-              show($, { kind: 'hidden' })
-              void $.prompt.fill({ text: item.prompt }).then(
-                r => r.isFilled || $.ui.toast('could not fill the prompt box'),
-                error => $.ui.toast(`could not fill: ${String(error)}`),
-              )
-            }}
-          />
-        </Box>
-      ))}
-      <Box marginLeft={2}>
-        <Button hotkey="0" plain label="dismiss" onPress={() => show($, { kind: 'hidden' })} />
+  const canHover = e.surface === 'desktop' || e.surface === 'vscode'
+  const columns = contentColumns(e) - 2
+  const rowsFor = (prompt: string) => Math.min(PREVIEW_ROWS, Math.ceil([...prompt].length / columns))
+  const previewRows = canHover ? Math.max(0, ...items.map(item => rowsFor(item.prompt))) : 0
+
+  const rows = items.map((item, index) => (
+    <Box flexDirection="row" flexGrow={1}>
+      <Box flexGrow={1} flexShrink={1}>
+        <Button
+          hotkey={String(index + 1)}
+          plain
+          label={item.label}
+          onPress={() => {
+            show($, { kind: 'hidden' })
+            void $.prompt.fill({ text: item.prompt }).then(
+              r => r.isFilled || $.ui.toast('could not fill the prompt box'),
+              error => $.ui.toast(`could not fill: ${String(error)}`),
+            )
+          }}
+        />
       </Box>
+      {index === items.length - 1 ? (
+        <Box flexShrink={0} gap={1}>
+          {previewRows > 0 ? <Text dimColor>hover for full text</Text> : null}
+          <Button hotkey="0" plain label="dismiss" onPress={() => show($, { kind: 'hidden' })} />
+        </Box>
+      ) : null}
+      {previewRows > 0 ? (
+        <Box
+          position="absolute"
+          top={items.length - index}
+          left={0}
+          right={0}
+          height={previewRows}
+          overflow="hidden"
+          display="none"
+          hover={{ display: 'flex' }}
+        >
+          <Text dimColor wrap="wrap">
+            ↳ {item.prompt}
+          </Text>
+        </Box>
+      ) : null}
     </Box>
-  )
+  ))
+
+  // The area the previews are placed over: empty until one is revealed.
+  if (previewRows > 0) rows.push(<Box flexGrow={1} height={previewRows} />)
+
+  return { label: 'next', rows }
 }

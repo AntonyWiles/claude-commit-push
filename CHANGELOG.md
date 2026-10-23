@@ -5,6 +5,11 @@
 - New: the session archive. Every session's conversation is saved as it happens to
   `%USERPROFILE%\claude-session-archive\<session id>\` (`meta.json` and `rows-NNNN.jsonl`),
   for turning repeated work into skills later. `/archive` shows where; `sessionArchive` turns it off.
+- New band layout: the full-width `── usage` / `── git` rules are gone. Each feature's rows sit
+  beside a short dim label in a gutter (`usage │`, `git │`, `next │`), and the context ring closes
+  the first row instead of taking one of its own.
+- Next steps: hover a suggestion on desktop or VS Code to read its full prompt in a preview area
+  under the list, which keeps its height so nothing moves.
 
 ## 1.0.1 - 2026-10-23
 

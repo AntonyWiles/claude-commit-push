@@ -44,5 +44,11 @@ test('git bar, next steps and context ring share the band', OPTIONS, async ($, o
   expect(await band.find({ key: 'commit-push:commit' })).toBeDefined()
   expect((await band.find({ type: 'Text', text: /engine/ }))?.text).toBe('engine')
   expect((await band.find({ type: 'Svg' }))?.props.alt).toContain('Context 100k of 400k (25%)')
+  // The gutter layout: a label per section, no full-width rules, the ring closing the first row.
+  expect(await band.find({ type: 'Text', text: /^git$/ })).toBeDefined()
+  expect(await band.find({ type: 'Text', text: /──/ })).toBeUndefined()
+  const rows = (await band.findAll({ type: 'Box' })).filter(b => String(b.key).startsWith('band:'))
+  expect(rows[0]?.key).toBe('band:git:0')
+  expect(JSON.stringify(rows[0]?.children)).toContain('"Svg"')
   await band.unmount()
 })

@@ -1,7 +1,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PluginOptions } from 'claude-code'
 
-import type { In, MatchedIn, MatchedNext, NextOf } from '../hook-types'
+import type { BandIn, Section } from '../band'
+import type { In, NextOf } from '../hook-types'
 
 import type { Busy, RepoInfo } from '../../types'
 
@@ -395,12 +396,11 @@ export async function sessionAppend($: EngineInterface, e: In<'session.append'>,
   return result
 }
 
-// The band is shared: draw what the mods beneath drew, and add one row under it.
-export async function renderAbovePrompt($: EngineInterface, e: MatchedIn<'ui.render', { component: 'AbovePrompt' }>, next: MatchedNext<'ui.render', { component: 'AbovePrompt' }>) {
-  const below = await next(e)
+// The git section of the band: one row, Commit and Push first.
+export async function bandSection($: EngineInterface, e: BandIn): Promise<Section | null> {
   const info = await read($, repo)
-  if (e.props.hasSurvey || info === null) {
-    return below
+  if (info === null) {
+    return null
   }
 
   const working = await read($, busy)
@@ -435,37 +435,32 @@ export async function renderAbovePrompt($: EngineInterface, e: MatchedIn<'ui.ren
     info.hasUpstream ? `${info.ahead} to push` : 'no upstream',
   ].filter(Boolean)
 
-  return (
-    <Box flexDirection="column">
-      {below}
-      {/* a labelled rule, so this row reads apart from the other mods' rows in the band */}
-      <Text dimColor wrap="truncate-end">
-        {`── git ${'─'.repeat(Math.max(0, e.props.bodyColumns - 7))}`}
-      </Text>
-      <Box key="commit-push:row" flexDirection="row" gap={1}>
-        <Button
-          key="commit-push:commit"
-          label={working === 'commit' ? 'Committing...' : 'Commit'}
-          variant="primary"
-          onPress={() => run($, 'commit', () => commit($))}
-        />
-        <Button
-          key="commit-push:push"
-          label={working === 'push' ? 'Pushing...' : 'Push'}
-          onPress={() => run($, 'push', () => push($))}
-        />
-        <Text bold>{info.name}</Text>
-        {branchPicker ?? <Text>⎇ {info.branch}</Text>}
-        <Text wrap="truncate-end">
-          <Text color="success">+{info.added}</Text> <Text color="error">−{info.removed}</Text>
-          <Text dimColor>
-            {' · '}
-            {changes.join(' · ')}
-            {busyWith && info.branches.length > 1 ? ` · branch locked: ${busyWith}` : ''}
-            {last ? ` · ${last}` : ''}
-          </Text>
+  const row = (
+    <Box key="commit-push:row" flexDirection="row" gap={1}>
+      <Button
+        key="commit-push:commit"
+        label={working === 'commit' ? 'Committing...' : 'Commit'}
+        variant="primary"
+        onPress={() => run($, 'commit', () => commit($))}
+      />
+      <Button
+        key="commit-push:push"
+        label={working === 'push' ? 'Pushing...' : 'Push'}
+        onPress={() => run($, 'push', () => push($))}
+      />
+      <Text bold>{info.name}</Text>
+      {branchPicker ?? <Text>⎇ {info.branch}</Text>}
+      <Text wrap="truncate-end">
+        <Text color="success">+{info.added}</Text> <Text color="error">−{info.removed}</Text>
+        <Text dimColor>
+          {' · '}
+          {changes.join(' · ')}
+          {busyWith && info.branches.length > 1 ? ` · branch locked: ${busyWith}` : ''}
+          {last ? ` · ${last}` : ''}
         </Text>
-      </Box>
+      </Text>
     </Box>
   )
+
+  return { label: 'git', rows: [row] }
 }

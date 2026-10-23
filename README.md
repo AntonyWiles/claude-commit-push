@@ -5,7 +5,7 @@ holding five features that each switch on or off:
 
 | Feature | What it does | Option |
 | --- | --- | --- |
-| **Context ring** | A small ring at the right of the band above the prompt box that fills as the context window does. Full is your auto-compact window (say 400k on a 1M model), or the model's window when auto-compact is off. Hover it for the numbers. The terminal shows `ctx 52%` in its prompt footer instead. | `contextRing`, `contextLimit` |
+| **Context ring** | A small ring at the right end of the band's first row that fills as the context window does. Full is your auto-compact window (say 400k on a 1M model), or the model's window when auto-compact is off. Hover it for the numbers. The terminal shows `ctx 52%` in its prompt footer instead. | `contextRing`, `contextLimit` |
 | **Git bar** | Commit (Haiku writes the message) and Push buttons, branch picker and diff count above the prompt. | `gitBar` |
 | **Usage meter** | Plan-limit %, tokens and API-equivalent $ in the band above the prompt, and the `/burn` pane. Needs its collector (installed by `deploy\install.ps1`). From [rohit3a/usage-meter](https://github.com/rohit3a/usage-meter). | `usageMeter` |
 | **Next steps** | After each turn, up to three suggested next prompts above the input: press 1, 2 or 3 to put one in the prompt box, 0 to dismiss. From Thariq Shihipar's `next-steps` plugin. | `nextSteps`, `minAnswerChars`, `suggestSkills` |
@@ -84,6 +84,7 @@ claude plugin configure desktop-mods@claude-desktop-mods          # show them
 ```
 .claude-plugin/        plugin.json (name, version, options) and marketplace.json
 hooks/register.tsx     the one hooks module: chains every feature's hooks per event
+hooks/band.tsx         the band above the prompt: every feature's rows under a labelled gutter
 hooks/features/        context-ring, git-bar, next-steps, usage-meter, session-archive
 hooks/hook-types.ts    parameter types for hooks written as function declarations
 types/index.d.ts       the $.state contract for every feature
@@ -100,7 +101,9 @@ tests/                 claude plugin test suites, one per feature plus a combine
    taking `($: EngineInterface, e: In<'event'>, next: NextOf<'event'>)` (types from
    `hooks/hook-types.ts`). The engine follows `$` across files only into function
    declarations, and a module may hook each event only once, so features never call `on`.
-2. Chain it into the event's hook in `hooks/register.tsx`, behind an option.
+2. Chain it into the event's hook in `hooks/register.tsx`, behind an option. A feature that
+   draws in the band exports `bandSection($, e)` returning `{ label, rows }` (or `null`), and
+   `register.tsx` adds it to the sections it hands `drawBand` in `hooks/band.tsx`.
 3. Add the option to `userConfig` in `plugin.json`, any `$.state` values to `types/index.d.ts`
    (all under `'desktop-mods'`), and a `tests/<name>.test.tsx` that turns the other features off.
 

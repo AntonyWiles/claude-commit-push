@@ -1,6 +1,7 @@
 import { atom, read, update } from 'claude-code'
-import type { EngineInterface, PluginOptions, SessionContextUsage } from 'claude-code'
+import type { EngineInterface, PluginOptions, RenderElement, SessionContextUsage } from 'claude-code'
 
+import type { BandIn } from '../band'
 import type { In, MatchedIn, MatchedNext, NextOf } from '../hook-types'
 
 import type { ContextFill } from '../../types'
@@ -137,25 +138,16 @@ export async function renderSessionMode($: EngineInterface, e: MatchedIn<'ui.ren
   return next({ ...e, props: { ...e.props, modes: [`ctx ${pct}%`, ...e.props.modes] } })
 }
 
-// The band above the prompt, on the surfaces that draw Svg: the ring on a row
-// of its own at the right, nearest the prompt box.
-export async function renderAbovePrompt($: EngineInterface, e: MatchedIn<'ui.render', { component: 'AbovePrompt' }>, next: MatchedNext<'ui.render', { component: 'AbovePrompt' }>) {
-  const below = await next(e)
+// The ring for the band above the prompt, on the surfaces that draw Svg; the
+// band closes its first row with it. Hover it for the numbers.
+export async function bandRing($: EngineInterface, e: BandIn): Promise<RenderElement | null> {
   const f = await read($, fill)
-  if (!f || e.props.hasSurvey || e.surface === 'terminal') return below
+  if (!f || e.surface === 'terminal') return null
 
   const els = $.ui.resolve(e)
-  if (!('Svg' in els)) return below
-  const { Box, Svg } = els
+  if (!('Svg' in els)) return null
+  const { Svg } = els
   const label = describe(f)
 
-  // The engine's own node (inside `below`) may not sit under a sized Box: size only the ring's row.
-  return (
-    <Box flexDirection="column">
-      {below}
-      <Box flexDirection="row" width={e.props.bodyColumns} justifyContent="flex-end">
-        <Svg source={ringSvg(f.tokens / f.limit, label)} alt={label} width={SIZE} height={SIZE} isInteractive />
-      </Box>
-    </Box>
-  )
+  return <Svg source={ringSvg(f.tokens / f.limit, label)} alt={label} width={SIZE} height={SIZE} isInteractive />
 }

@@ -1,6 +1,8 @@
 import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PluginOptions, SessionRateLimit } from 'claude-code'
 
+import { contentColumns } from '../band'
+import type { BandIn, Section } from '../band'
 import type { In, MatchedIn, MatchedNext, NextOf } from '../hook-types'
 
 import type {
@@ -589,17 +591,18 @@ export async function runBurn($: EngineInterface, e: MatchedIn<'command.run', { 
 // ---- the band above the prompt: this turn's burn, and Codex when it's running for this chat
 
 // The band is shared: keep what the mods beneath drew, and add these rows under it.
-export async function renderAbovePrompt($: EngineInterface, e: MatchedIn<'ui.render', { component: 'AbovePrompt' }>, next: MatchedNext<'ui.render', { component: 'AbovePrompt' }>) {
-  const below = await next(e)
-  if (e.props.hasSurvey || (await read($, hiddenA))) return below
+// The usage section of the band: a Codex run this chat started, then this
+// turn's (or the last turn's) cost, or before any turn the plan limits.
+export async function bandSection($: EngineInterface, e: BandIn): Promise<Section | null> {
+  if (await read($, hiddenA)) return null
   const lv = await read($, liveA)
   const p = await read($, pulseA)
   const run = p?.codex.runs.find(r => r.status === 'running' && r.parent?.sid === sessionId)
   const v = await read($, viewA)
-  if (!lv && !run && !v) return below
+  if (!lv && !run && !v) return null
   const { Box, Text, Button } = $.ui.resolve(e)
   const now = await $.clock.now()
-  const W = e.props.bodyColumns
+  const W = contentColumns(e)
 
   let turnRow: JSX.Element | null = null
   if (lv) {
@@ -618,7 +621,7 @@ export async function renderAbovePrompt($: EngineInterface, e: MatchedIn<'ui.ren
       lv.agents.length ? `${lv.agents.length} subagent${lv.agents.length === 1 ? '' : 's'}${running ? ` (${running} running)` : ''}` : '',
     ].filter(Boolean)
     turnRow = (
-      <Box flexDirection="row" width={W}>
+      <Box flexDirection="row" flexGrow={1}>
         <Box flexGrow={1} flexShrink={1}>
           <Text dimColor={!isWorking} wrap="truncate-end">
             {parts.join(' · ')}
@@ -637,7 +640,7 @@ export async function renderAbovePrompt($: EngineInterface, e: MatchedIn<'ui.ren
     const line = `◆ Codex · ${doing}`
     const meta = ` · ${fmtDur(now - (run.started || now))} · ${fmtTok(run.tokens[0] + run.tokens[2])} tok`
     codexRow = (
-      <Box flexDirection="row" width={W}>
+      <Box flexDirection="row" flexGrow={1}>
         <Box flexGrow={1} flexShrink={1}>
           <Text color="cyan" wrap="truncate-end">
             {clip(line, Math.max(20, W - meta.length - 16))}
@@ -669,7 +672,7 @@ export async function renderAbovePrompt($: EngineInterface, e: MatchedIn<'ui.ren
       cc !== null ? `${fmtUsd(cc)} session` : '',
     ].filter(Boolean)
     meterRow = (
-      <Box flexDirection="row" width={W}>
+      <Box flexDirection="row" flexGrow={1}>
         <Box flexGrow={1} flexShrink={1}>
           <Text dimColor wrap="truncate-end">
             {parts.join(' · ')}
@@ -682,20 +685,9 @@ export async function renderAbovePrompt($: EngineInterface, e: MatchedIn<'ui.ren
     )
   }
 
-  // The engine's own node (inside `below`) may not sit under a sized Box: size only these rows.
-  return (
-    <Box flexDirection="column">
-      {below}
-      <Box flexDirection="column" width={W}>
-        {/* a labelled rule, so this row reads apart from the other mods' rows in the band */}
-        <Text dimColor wrap="truncate-end">
-          {`── usage ${'─'.repeat(Math.max(0, W - 9))}`}
-        </Text>
-        {codexRow}
-        {turnRow ?? meterRow}
-      </Box>
-    </Box>
-  )
+  const rows = [codexRow, turnRow ?? meterRow].filter((row): row is JSX.Element => row !== null)
+
+  return rows.length === 0 ? null : { label: 'usage', rows }
 }
 
 // ---- the pane
