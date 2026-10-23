@@ -17,7 +17,7 @@ const BAND = {
 } as const
 
 // The context ring alone: the mod's other features are switched off.
-const ONLY = { options: { usageMeter: false, nextSteps: false, gitBar: false } }
+const ONLY = { options: { usageMeter: false, nextSteps: false, gitBar: false, sessionArchive: false } }
 
 const WINDOW = 1_000_000
 

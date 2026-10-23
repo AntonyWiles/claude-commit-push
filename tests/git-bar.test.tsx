@@ -21,7 +21,7 @@ const result = (exitCode: number, stdout = '') => ({
 const ok = (stdout = '') => result(0, stdout)
 
 // The git bar alone: the mod's other features are switched off.
-const ONLY = { options: { usageMeter: false, nextSteps: false, contextRing: false } }
+const ONLY = { options: { usageMeter: false, nextSteps: false, contextRing: false, sessionArchive: false } }
 
 type Repo = {
   untracked?: string
