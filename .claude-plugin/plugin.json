@@ -1,6 +1,6 @@
 {
   "name": "desktop-mods",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Antony's Claude Code Desktop mods in one: context ring in the prompt footer, git Commit/Push bar, usage meter, and next-step suggestions.",
   "author": { "name": "AntonyWiles", "url": "https://github.com/AntonyWiles" },
   "repository": "https://github.com/AntonyWiles/claude-desktop-mods",

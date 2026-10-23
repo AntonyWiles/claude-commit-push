@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+## 1.0.1 - 2026-10-23
+
 - The context ring now draws in the band above the prompt on desktop: the desktop app draws mod
   content only there and in panes, never in the prompt footer. The terminal keeps its `ctx N%` footer label.
 
