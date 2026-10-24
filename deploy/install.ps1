@@ -30,6 +30,13 @@ $Marketplace = "claude-desktop-mods"
 
 function Step($text) { Write-Host "==> $text" -ForegroundColor Cyan }
 function Invoke-Claude { & claude @args; if ($LASTEXITCODE -ne 0) { throw "claude $($args -join ' ') failed ($LASTEXITCODE)" } }
+# For calls that may fail harmlessly: Windows PowerShell 5.1 turns a native program's
+# redirected stderr into errors, which "Stop" makes fatal. Returns the output as text.
+function Invoke-ClaudeQuiet {
+  $saved = $ErrorActionPreference
+  $ErrorActionPreference = "Continue"
+  try { (& claude @args 2>&1 | ForEach-Object { "$_" }) -join "`n" } finally { $ErrorActionPreference = $saved }
+}
 
 if (-not (Get-Command claude -ErrorAction SilentlyContinue)) {
   throw "The claude CLI is not on PATH. Install Claude Code first: winget install Anthropic.ClaudeCode"
@@ -44,7 +51,7 @@ if (-not $KeepOld) {
   Step "Disabling the old separate mods (re-enable with: claude plugin enable <name>)"
   foreach ($old in @("commit-push@local-mods", "next-steps@claude-community")) {
     # Fails harmlessly where the plugin isn't installed or is already disabled.
-    & claude plugin disable $old 2>&1 | Out-Null
+    Invoke-ClaudeQuiet plugin disable $old | Out-Null
     if ($LASTEXITCODE -eq 0) { Write-Host "    disabled $old" }
   }
   $link = Join-Path $env:USERPROFILE ".claude\skills\usage-meter"
@@ -62,16 +69,16 @@ if (-not $KeepOld) {
 # 2. the mod
 Step "Installing $Plugin"
 $source = if ($Checkout) { $Checkout } else { $Repo }
-$known = (& claude plugin marketplace list 2>&1) -join "`n"
+$known = Invoke-ClaudeQuiet plugin marketplace list
 if ($known -match [regex]::Escape($Marketplace)) {
   & claude plugin marketplace update $Marketplace | Out-Null
 } else {
   Invoke-Claude plugin marketplace add $source
 }
-$installed = (& claude plugin list 2>&1) -join "`n"
+$installed = Invoke-ClaudeQuiet plugin list
 if ($installed -match [regex]::Escape("$Plugin@$Marketplace")) {
   & claude plugin update "$Plugin@$Marketplace"
-  & claude plugin enable "$Plugin@$Marketplace" 2>$null | Out-Null
+  Invoke-ClaudeQuiet plugin enable "$Plugin@$Marketplace" | Out-Null
 } else {
   Invoke-Claude plugin install "$Plugin@$Marketplace" --scope user
 }
