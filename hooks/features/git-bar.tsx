@@ -2,6 +2,7 @@ import { atom, read, update } from 'claude-code'
 import type { EngineInterface, PluginOptions } from 'claude-code'
 
 import type { BandIn, Section } from '../band'
+import type { LinksProps } from '../clients/links'
 import type { In, NextOf } from '../hook-types'
 
 import type { Busy, RepoInfo } from '../../types'
@@ -10,6 +11,8 @@ const repo = atom({ plugin: 'desktop-mods', key: 'repo' } as const, null)
 const busy = atom({ plugin: 'desktop-mods', key: 'busy' } as const, null)
 const note = atom({ plugin: 'desktop-mods', key: 'note' } as const, null)
 const tasks = atom({ plugin: 'desktop-mods', key: 'tasks' } as const, [])
+
+const LINKS_CLIENT = 'commit-push:links'
 
 // Haiku sees at most this much of the staged diff.
 const DIFF_LIMIT = 60_000
@@ -429,7 +432,8 @@ export async function bandSection($: EngineInterface, e: BandIn): Promise<Sectio
         })()
       : null
 
-  const { Box, Button, Text } = $.ui.resolve(e)
+  const els = $.ui.resolve(e)
+  const { Box, Button, Text } = els
   const changes = [
     info.untracked ? `${info.untracked} new` : '',
     info.hasUpstream ? `${info.ahead} to push` : 'no upstream',
@@ -437,17 +441,33 @@ export async function bandSection($: EngineInterface, e: BandIn): Promise<Sectio
 
   const row = (
     <Box key="commit-push:row" flexDirection="row" gap={1}>
-      <Button
-        key="commit-push:commit"
-        label={working === 'commit' ? 'Committing...' : 'Commit'}
-        variant="primary"
-        onPress={() => run($, 'commit', () => commit($))}
-      />
-      <Button
-        key="commit-push:push"
-        label={working === 'push' ? 'Pushing...' : 'Push'}
-        onPress={() => run($, 'push', () => push($))}
-      />
+      {e.surface === 'desktop' && 'Client' in els ? (
+        (() => {
+          // The desktop draws every Button native: there the two are text links.
+          const { Client } = els
+          const props: LinksProps = {
+            links: [
+              { id: 'commit', label: working === 'commit' ? 'Committing...' : 'Commit', isBusy: working !== null },
+              { id: 'push', label: working === 'push' ? 'Pushing...' : 'Push', isBusy: working !== null },
+            ],
+          }
+          return <Client key={LINKS_CLIENT} module="../clients/links.tsx" props={props} />
+        })()
+      ) : (
+        <>
+          <Button
+            key="commit-push:commit"
+            label={working === 'commit' ? 'Committing...' : 'Commit'}
+            variant="primary"
+            onPress={() => run($, 'commit', () => commit($))}
+          />
+          <Button
+            key="commit-push:push"
+            label={working === 'push' ? 'Pushing...' : 'Push'}
+            onPress={() => run($, 'push', () => push($))}
+          />
+        </>
+      )}
       <Text bold>{info.name}</Text>
       {branchPicker ?? <Text>⎇ {info.branch}</Text>}
       <Text wrap="truncate-end">
@@ -463,4 +483,13 @@ export async function bandSection($: EngineInterface, e: BandIn): Promise<Sectio
   )
 
   return { label: 'git', rows: [row] }
+}
+
+// A click on the desktop's Commit or Push link.
+export async function clientMessage($: EngineInterface, e: In<'ui.message'>, next: NextOf<'ui.message'>) {
+  if (e.element !== LINKS_CLIENT) return next(e)
+  const press = (e.data as { press?: unknown } | null)?.press
+  if (press === 'commit') void run($, 'commit', () => commit($))
+  if (press === 'push') void run($, 'push', () => push($))
+  return next(e)
 }

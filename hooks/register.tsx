@@ -12,6 +12,7 @@ import {
 } from './features/context-ring'
 import {
   bandSection as gitBandSection,
+  clientMessage as gitMessage,
   sessionAppend as gitSessionAppend,
   sessionStart as gitSessionStart,
   toolCall as gitToolCall,
@@ -21,6 +22,7 @@ import {
 import {
   configure as configureNext,
   bandSection as nextBandSection,
+  clientMessage as nextMessage,
   turnComplete as nextTurnComplete,
   turnStart as nextTurnStart,
 } from './features/next-steps'
@@ -118,17 +120,28 @@ export const register: Register = (on, options) => {
 
   on('ui.render', { component: 'AbovePrompt' }, async ($, e, next) => {
     const below = await next(e)
-    if (e.props.hasSurvey) return below
+    // The desktop's end-of-turn box (recap, question, buttons) holds the band
+    // as a survey after most turns. The band still draws under it, without
+    // the next-step rows: the box suggests the next step itself, and their
+    // 1/2/3 hotkeys would clash with its buttons.
+    const survey = e.props.hasSurvey
 
     const [usageRows, gitRows, nextRows, ringMark] = await Promise.all([
       usage ? usageBandSection($, e) : null,
       git ? gitBandSection($, e) : null,
-      steps ? nextBandSection($, e) : null,
+      steps && !survey ? nextBandSection($, e) : null,
       ring ? bandRing($, e) : null,
     ])
     const sections = [usageRows, gitRows, nextRows].filter(section => section !== null)
 
     return drawBand($, e, below, sections, ringMark)
+  })
+
+  // Presses in the desktop's Clients: the git links and the next-step list.
+  on('ui.message', ($, e, next) => {
+    const toSteps = (ev: typeof e) => (steps ? nextMessage($, ev, next) : next(ev))
+
+    return git ? gitMessage($, e, toSteps as never) : toSteps(e)
   })
 
   on('ui.render', { component: 'SessionMode' }, ($, e, next) => (ring ? ringRenderSessionMode($, e, next) : next(e)))

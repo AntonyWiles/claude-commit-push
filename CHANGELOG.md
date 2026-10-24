@@ -2,6 +2,8 @@
 
 ## Unreleased
 
+- Fix: the band stayed hidden after most turns on the desktop, whose end-of-turn box (recap,
+  question, buttons) counts as a survey. The band now draws under it, without the next-step rows.
 - New: the session archive. Every session's conversation is saved as it happens to
   `%USERPROFILE%\claude-session-archive\<session id>\` (`meta.json` and `rows-NNNN.jsonl`),
   for turning repeated work into skills later. `/archive` shows where; `sessionArchive` turns it off.
@@ -9,7 +11,9 @@
   beside a short dim label in a gutter (`usage │`, `git │`, `next │`), and the context ring closes
   the first row instead of taking one of its own.
 - Next steps: hover a suggestion on desktop or VS Code to read its full prompt in a preview area
-  under the list, which keeps its height so nothing moves.
+  under the list, which keeps its height so nothing moves. On the desktop the preview waits until
+  the pointer has rested on a row for 200ms, follows it row to row, and stays while you read it.
+- On the desktop, Commit and Push are text links instead of buttons.
 
 ## 1.0.1 - 2026-10-23
 

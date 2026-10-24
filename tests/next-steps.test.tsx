@@ -1,4 +1,4 @@
-import { expect, test } from 'claude-code/testing'
+import { expect, mock, test } from 'claude-code/testing'
 import type { TestBody } from 'claude-code/testing'
 
 const BAND = {
@@ -43,12 +43,91 @@ async function offer($: Parameters<TestBody>[0]) {
   await $.turn.complete({ answer: 'x'.repeat(200), durationMs: 1000, isAborted: false, turnId: 't1', reason: 'answer' } as never)
 }
 
-test('the suggestions sit in the gutter layout, each with its full prompt on hover', ONLY, async ($, on) => {
+const PREVIEW = 'next-steps:preview'
+const row = (n: number) => `next-steps:row:${n}`
+
+// The preview area's text, as the desktop's preview Client last drew it.
+async function preview(ui: { find: (q: never) => Promise<{ text: string } | undefined> }) {
+  return (await ui.find({ type: 'Text', text: /^↳ /, in: PREVIEW } as never))?.text
+}
+
+const HINT = '↳ rest on a step to read it in full'
+
+test('on the desktop the full prompt follows the pointer after 200ms', ONLY, async ($, on) => {
   fakeEngine(on)
+  const clock = mock.clock(on, { now: 0 })
   await offer($)
 
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
   expect(await ui.find({ type: 'Text', text: /^next$/ })).toBeDefined()
+  expect(await ui.find({ type: 'Button', text: 'Cut a minor release and push', in: row(1) })).toBeDefined()
+  expect(await preview(ui)).toBe(HINT)
+
+  // Not before the pointer has rested 200ms on a step.
+  await ui.pointer({ type: 'enter', x: 4, y: 0, in: row(1) })
+  await clock.advance(150)
+  expect(await preview(ui)).toBe(HINT)
+  await clock.advance(100)
+  expect(await preview(ui)).toBe(`↳ ${LONG}`)
+
+  // From 1 to 3: 3 takes over once the pointer has rested there.
+  await ui.pointer({ type: 'leave', x: 4, y: 0, in: row(1) })
+  await ui.pointer({ type: 'enter', x: 4, y: 0, in: row(3) })
+  await clock.advance(250)
+  expect(await preview(ui)).toBe('↳ Read claude-session-archive and suggest skills.')
+
+  // Back up to 2: 2 shows, never stuck on 3, however tall the rows are drawn.
+  await ui.pointer({ type: 'leave', x: 4, y: 0, in: row(3) })
+  await ui.pointer({ type: 'enter', x: 4, y: 0, in: row(2) })
+  await clock.advance(250)
+  expect(await preview(ui)).toBe('↳ Delete the add-session-archive branch.')
+
+  // Passing quickly over 3 on the way down changes nothing.
+  await ui.pointer({ type: 'leave', x: 4, y: 0, in: row(2) })
+  await ui.pointer({ type: 'enter', x: 4, y: 0, in: row(3) })
+  await clock.advance(100)
+  await ui.pointer({ type: 'leave', x: 4, y: 0, in: row(3) })
+  // Down into the preview to read it: it stays.
+  await ui.pointer({ type: 'enter', x: 4, y: 0, in: PREVIEW })
+  await clock.advance(500)
+  expect(await preview(ui)).toBe('↳ Delete the add-session-archive branch.')
+
+  // Leaving the list hides it, after the same rest.
+  await ui.pointer({ type: 'leave', x: 4, y: 0, in: PREVIEW })
+  await clock.advance(250)
+  expect(await preview(ui)).toBe(HINT)
+  await ui.unmount()
+})
+
+test('on the desktop a pick fills the prompt box and 0 dismisses', ONLY, async ($, on) => {
+  fakeEngine(on)
+  const filled: string[] = []
+  on('prompt.fill', (_, e) => {
+    filled.push(e.text)
+    return { isFilled: true } as never
+  })
+  await offer($)
+
+  let ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  await ui.press({ key: 'next-steps:2' })
+  expect(filled).toEqual(['Delete the add-session-archive branch.'])
+  await ui.unmount()
+  ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  expect(await ui.find({ type: 'Text', text: /^next$/ })).toBeUndefined()
+  await ui.unmount()
+
+  await offer($)
+  ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
+  await ui.press({ key: 'next-steps:dismiss' })
+  expect(filled).toHaveLength(1)
+  await ui.unmount()
+})
+
+test('VS Code reveals each preview from its keyed row', ONLY, async ($, on) => {
+  fakeEngine(on)
+  await offer($)
+
+  const ui = await $.ui.mount({ ...BAND, surface: 'vscode' })
   expect(await ui.find({ type: 'Button', text: 'Cut a minor release and push' })).toBeDefined()
   expect(await ui.find({ type: 'Text', text: 'hover for full text' })).toBeDefined()
 

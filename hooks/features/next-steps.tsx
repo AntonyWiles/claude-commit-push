@@ -14,6 +14,8 @@
 import type { CommandInfo, EngineInterface, PluginOptions } from 'claude-code'
 
 import { contentColumns } from '../band'
+import type { PreviewProps } from '../clients/preview'
+import type { StepProps } from '../clients/step'
 import type { BandIn, Section } from '../band'
 import type { In, NextOf } from '../hook-types'
 
@@ -148,7 +150,27 @@ let view: View = { kind: 'hidden' }
 
 function show($: EngineInterface, nextView: View): void {
   view = nextView
+  hover = { pending: null, shown: null, isReading: false }
+  hoverTimer?.cancel()
   $.ui.invalidate('ui.render')
+}
+
+// The desktop's preview: which suggestion the pointer is on (`pending`),
+// which one the preview shows (`shown`), and whether the pointer is down in
+// the preview reading it. `shown` follows `pending` once the pointer has
+// rested HOVER_DELAY ms; while reading, it stays.
+const HOVER_DELAY = 200
+let hover: { pending: number | null; shown: number | null; isReading: boolean } = { pending: null, shown: null, isReading: false }
+let hoverTimer: { cancel: () => void } | undefined
+
+function settleHover($: EngineInterface) {
+  hoverTimer?.cancel()
+  hoverTimer = $.clock.after(HOVER_DELAY, () => {
+    const target = hover.isReading ? hover.shown : hover.pending
+    if (target === hover.shown) return
+    hover = { ...hover, shown: target }
+    $.ui.invalidate('ui.render')
+  })
 }
 
 // The mod's options, read when the module registers.
@@ -194,16 +216,33 @@ export async function turnComplete($: EngineInterface, e: In<'turn.complete'>, n
 
 // The longest preview, in rows; a longer prompt is cut there.
 const PREVIEW_ROWS = 4
+const STEP_CLIENT = 'next-steps:row:'
+const PREVIEW_CLIENT = 'next-steps:preview'
+
+// A pick writes the suggestion into the prompt box as the person's draft.
+function take($: EngineInterface, item: Suggestion) {
+  show($, { kind: 'hidden' })
+  void $.prompt.fill({ text: item.prompt }).then(
+    r => r.isFilled || $.ui.toast('could not fill the prompt box'),
+    error => $.ui.toast(`could not fill: ${String(error)}`),
+  )
+}
 
 // The next section of the band: the suggestions as 1/2/3 buttons, and under
 // them a preview area where the full prompt of the one under the pointer
-// shows. Each preview is drawn hidden inside its suggestion's row and placed
-// down over the area: the band keys every row, so the surface reveals it
-// while the pointer is on that row, with no hook run. The area keeps its
-// height whichever is shown, so nothing in the band moves as the pointer does.
+// shows. The area keeps its height whichever is shown, so nothing in the
+// band moves as the pointer does.
+//
+// On the desktop each suggestion is a Client of its own (hooks/clients/step.tsx)
+// that says when the pointer comes onto it and leaves, and so is the preview
+// (hooks/clients/preview.tsx); the preview follows after 200ms (settleHover).
+// VS Code draws no Client: there each preview is drawn hidden inside its
+// suggestion's row and placed down over the area, and the band's keyed rows
+// reveal it.
 export async function bandSection($: EngineInterface, e: BandIn): Promise<Section | null> {
   if (e.props.isWorking || view.kind === 'hidden') return null
-  const { Box, Text, Button } = $.ui.resolve(e)
+  const els = $.ui.resolve(e)
+  const { Box, Text, Button } = els
 
   if (view.kind === 'loading') {
     return { label: 'next', rows: [<Text dimColor>thinking of next steps…</Text>] }
@@ -215,6 +254,24 @@ export async function bandSection($: EngineInterface, e: BandIn): Promise<Sectio
   const rowsFor = (prompt: string) => Math.min(PREVIEW_ROWS, Math.ceil([...prompt].length / columns))
   const previewRows = canHover ? Math.max(0, ...items.map(item => rowsFor(item.prompt))) : 0
 
+  if (e.surface === 'desktop' && 'Client' in els) {
+    const { Client } = els
+    const steps = items.map((item, index) => {
+      const props: StepProps = { index, label: item.label, isLast: index === items.length - 1 }
+      return <Client key={`${STEP_CLIENT}${index + 1}`} module="../clients/step.tsx" props={props} flexGrow={1} />
+    })
+    const shown = hover.shown === null ? undefined : items[hover.shown]
+    const preview: PreviewProps = {
+      text: shown?.prompt ?? 'rest on a step to read it in full',
+      isHint: shown === undefined,
+      rows: previewRows,
+    }
+    return {
+      label: 'next',
+      rows: [...steps, <Client key={PREVIEW_CLIENT} module="../clients/preview.tsx" props={preview} flexGrow={1} height={previewRows} />],
+    }
+  }
+
   const rows = items.map((item, index) => (
     <Box flexDirection="row" flexGrow={1}>
       <Box flexGrow={1} flexShrink={1}>
@@ -222,13 +279,7 @@ export async function bandSection($: EngineInterface, e: BandIn): Promise<Sectio
           hotkey={String(index + 1)}
           plain
           label={item.label}
-          onPress={() => {
-            show($, { kind: 'hidden' })
-            void $.prompt.fill({ text: item.prompt }).then(
-              r => r.isFilled || $.ui.toast('could not fill the prompt box'),
-              error => $.ui.toast(`could not fill: ${String(error)}`),
-            )
-          }}
+          onPress={() => take($, item)}
         />
       </Box>
       {index === items.length - 1 ? (
@@ -260,4 +311,30 @@ export async function bandSection($: EngineInterface, e: BandIn): Promise<Sectio
   if (previewRows > 0) rows.push(<Box flexGrow={1} height={previewRows} />)
 
   return { label: 'next', rows }
+}
+
+// The desktop's Clients: the pointer onto or off a suggestion or the preview,
+// `{ pick }` to take a suggestion, `{ dismiss }` to hide them.
+export async function clientMessage($: EngineInterface, e: In<'ui.message'>, next: NextOf<'ui.message'>) {
+  if (!e.element.startsWith(STEP_CLIENT) && e.element !== PREVIEW_CLIENT) return next(e)
+  const data = (e.data ?? {}) as { pick?: unknown; dismiss?: unknown; enter?: unknown; leave?: unknown }
+  if (view.kind !== 'offer') return next(e)
+
+  if (data.enter === 'preview') {
+    hover = { ...hover, isReading: true }
+  } else if (data.leave === 'preview') {
+    hover = { ...hover, isReading: false, pending: null }
+    settleHover($)
+  } else if (typeof data.enter === 'number') {
+    hover = { ...hover, pending: data.enter }
+    settleHover($)
+  } else if (typeof data.leave === 'number') {
+    if (hover.pending === data.leave) hover = { ...hover, pending: null }
+    settleHover($)
+  } else {
+    const item = typeof data.pick === 'number' ? view.items[data.pick] : undefined
+    if (item !== undefined) take($, item)
+    else if (data.dismiss === true) show($, { kind: 'hidden' })
+  }
+  return next(e)
 }

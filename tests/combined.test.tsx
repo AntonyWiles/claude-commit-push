@@ -41,7 +41,7 @@ test('git bar, next steps and context ring share the band', OPTIONS, async ($, o
     surface: 'desktop',
     props: { hasSurvey: false, isWorking: false, maxRows: 10, bodyColumns: 80, scroll: { offset: 0, bodyRows: 10 }, view: {} },
   } as never)
-  expect(await band.find({ key: 'commit-push:commit' })).toBeDefined()
+  expect(await band.find({ key: 'commit-push:links' })).toBeDefined()
   expect((await band.find({ type: 'Text', text: /engine/ }))?.text).toBe('engine')
   expect((await band.find({ type: 'Svg' }))?.props.alt).toContain('Context 100k of 400k (25%)')
   // The gutter layout: a label per section, no full-width rules, the ring closing the first row.
@@ -51,4 +51,18 @@ test('git bar, next steps and context ring share the band', OPTIONS, async ($, o
   expect(rows[0]?.key).toBe('band:git:0')
   expect(JSON.stringify(rows[0]?.children)).toContain('"Svg"')
   await band.unmount()
+
+  // Under a survey (the desktop's end-of-turn box) the band still draws, below it.
+  const held = await $.ui.mount({
+    plugin: 'desktop-mods',
+    component: 'AbovePrompt',
+    requestId: 'band-survey',
+    surface: 'desktop',
+    props: { hasSurvey: true, isWorking: false, maxRows: 10, bodyColumns: 80, scroll: { offset: 0, bodyRows: 10 }, view: {} },
+  } as never)
+  expect((await held.find({ type: 'Text', text: /engine/ }))?.text).toBe('engine')
+  expect(await held.find({ key: 'commit-push:links' })).toBeDefined()
+  expect((await held.find({ type: 'Svg' }))?.props.alt).toContain('Context 100k of 400k (25%)')
+  expect(await held.find({ type: 'Text', text: /^next$/ })).toBeUndefined()
+  await held.unmount()
 })

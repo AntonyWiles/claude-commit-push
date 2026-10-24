@@ -23,6 +23,15 @@ const ok = (stdout = '') => result(0, stdout)
 // The git bar alone: the mod's other features are switched off.
 const ONLY = { options: { usageMeter: false, nextSteps: false, contextRing: false, sessionArchive: false } }
 
+// Commit and Push: Buttons on the terminal, text links (a Client) on the desktop.
+const LINKS = 'commit-push:links'
+const control = (surface: 'terminal' | 'desktop') => ({ key: surface === 'desktop' ? LINKS : 'commit-push:commit' })
+
+// A click on the desktop's link, at its column: Commit is 0-5, Push 8-11.
+async function click(ui: { pointer: (e: never) => Promise<void> }, id: 'commit' | 'push') {
+  await ui.pointer({ type: 'down', x: id === 'commit' ? 1 : 9, y: 0, button: 'left', in: LINKS } as never)
+}
+
 type Repo = {
   untracked?: string
   sizes?: Record<string, number>
@@ -109,14 +118,14 @@ test('Commit asks Haiku on medium and commits; Push runs the script', ONLY, asyn
   }
 
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
-  await ui.press({ key: 'commit-push:commit' })
+  await click(ui, 'commit')
 
   expect(asked).toEqual([{ model: 'haiku', effort: 'medium' }])
   expect(ran.some(argv => argv.join(' ') === 'git add -u')).toBe(true)
   expect(stdins.get('commit -F -')).toBe('Fix the thing in a.ts')
   expect((await ui.find({ type: 'Text', text: /Committed/ }))?.text).toContain('Fix the thing')
 
-  await ui.press({ key: 'commit-push:push' })
+  await click(ui, 'push')
   const pushCall = ran.find(argv => argv[0] === 'powershell.exe')
   expect(pushCall?.some(arg => arg.endsWith('scripts/push.ps1'))).toBe(true)
   expect(pushCall?.slice(-2)).toEqual(['-Repo', 'C:/repo'])
@@ -132,7 +141,7 @@ test('secret-looking and large new files are left out of a commit', ONLY, async 
   })
   await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
-  await ui.press({ key: 'commit-push:commit' })
+  await click(ui, 'commit')
 
   expect(stdins.get('add --pathspec-from-file=- --pathspec-file-nul')).toBe('src/new.ts\0.env.example')
   const shown = (await ui.find({ type: 'Text', text: /Committed/ }))?.text
@@ -148,7 +157,7 @@ for (const [what, repo] of [
     const { ran, asked } = fakeRepo(on, repo)
     await $.session.start({ cwd: 'C:/repo', surface: 'desktop', isInteractive: true })
     const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
-    await ui.press({ key: 'commit-push:commit' })
+    await click(ui, 'commit')
 
     expect((await ui.find({ type: 'Text', text: /Not committed/ }))?.text).toContain('in progress')
     expect(ran.some(argv => argv[1] === 'add' || argv[1] === 'commit')).toBe(false)
@@ -164,7 +173,7 @@ test('the band keeps what other mods drew', ONLY, async ($, on) => {
   for (const surface of ['terminal', 'desktop'] as const) {
     const ui = await $.ui.mount({ ...BAND, surface })
     expect(await ui.find({ type: 'Text', text: /other mod/ })).toBeDefined()
-    expect(await ui.find({ key: 'commit-push:commit' })).toBeDefined()
+    expect(await ui.find(control(surface))).toBeDefined()
     await ui.unmount()
   }
 })
@@ -179,7 +188,7 @@ test('outside a git repository the band is left to the others', ONLY, async ($, 
 
   await $.session.start({ cwd: 'C:/tmp', surface: 'desktop', isInteractive: true })
   const ui = await $.ui.mount({ ...BAND, surface: 'desktop' })
-  expect(await ui.find({ key: 'commit-push:commit' })).toBeUndefined()
+  expect(await ui.find(control('desktop'))).toBeUndefined()
   expect(await ui.find({ type: 'Text', text: /engine/ })).toBeDefined()
   await ui.unmount()
 })
@@ -283,7 +292,7 @@ test('the band draws around the engine’s own node without sizing it', ONLY, as
 
   for (const surface of SURFACES) {
     const ui = await $.ui.mount({ ...BAND, surface })
-    expect(await ui.find({ key: 'commit-push:commit' })).toBeDefined()
+    expect(await ui.find(control(surface))).toBeDefined()
     await ui.unmount()
   }
 })
