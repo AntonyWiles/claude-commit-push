@@ -6,7 +6,8 @@ This repository includes code from other projects, each under the MIT License:
   (upstream commit cc0e64e, plus a local Windows port). Licence: licenses/usage-meter.LICENSE
 
 - hooks/features/next-steps.tsx
-  From next-steps 1.0.0 by Thariq Shihipar, in anthropics/claude-plugins-community.
+  From next-steps 1.0.0 by Thariq Shihipar, in anthropics/claude-plugins-community,
+  https://github.com/anthropics/claude-plugins-community/tree/main/next-steps
   Licence: MIT, as declared in that plugin's manifest.
 
 Changes made here: state keys moved under the combined plugin name `desktop-mods`,

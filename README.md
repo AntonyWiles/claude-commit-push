@@ -8,8 +8,12 @@ holding five features that each switch on or off:
 | **Context ring** | A small ring at the right end of the band's first row that fills as the context window does. Full is your auto-compact window (say 400k on a 1M model), or the model's window when auto-compact is off. Hover it for the numbers. The terminal shows `ctx 52%` in its prompt footer instead. | `contextRing`, `contextLimit` |
 | **Git bar** | Commit (Haiku writes the message) and Push buttons, branch picker and diff count above the prompt. | `gitBar` |
 | **Usage meter** | Plan-limit %, tokens and API-equivalent $ in the band above the prompt, and the `/burn` pane. Needs its collector (installed by `deploy\install.ps1`). From [rohit3a/usage-meter](https://github.com/rohit3a/usage-meter). | `usageMeter` |
-| **Next steps** | After each turn, up to three suggested next prompts above the input: press 1, 2 or 3 to put one in the prompt box, 0 to dismiss. From Thariq Shihipar's `next-steps` plugin. | `nextSteps`, `minAnswerChars`, `suggestSkills` |
+| **Next steps** | After each turn, up to three suggested next prompts above the input: press 1, 2 or 3 to put one in the prompt box, 0 to dismiss. From Thariq Shihipar's [next-steps](https://github.com/anthropics/claude-plugins-community/tree/main/next-steps) plugin. | `nextSteps`, `minAnswerChars`, `suggestSkills` |
 | **Session archive** | Saves every session's conversation as it happens to `%USERPROFILE%\claude-session-archive\<session id>\`: `meta.json` (folder, model, start time) and `rows-NNNN.jsonl`, one line per prompt, response, tool call and result, subagents' included. Long text is cut at 20,000 characters and images are left out. `/archive` shows where the current session goes. For reading back later, to turn repeated work into skills. | `sessionArchive` |
+
+Two features are other people's work, brought in here under the MIT licence: the usage meter is
+Rohit's [usage-meter](https://github.com/rohit3a/usage-meter), and next steps is Thariq Shihipar's
+[next-steps](https://github.com/anthropics/claude-plugins-community/tree/main/next-steps). Thanks to both; see [Credits and licence](#credits-and-licence).
 
 ## Install
 
@@ -130,4 +134,4 @@ it up on their next `claude plugin update` (or install-script run).
 
 MIT (see `LICENSE`). The usage meter is Rohit's [usage-meter](https://github.com/rohit3a/usage-meter)
 (MIT, `licenses/usage-meter.LICENSE`) with a Windows port; next steps is Thariq Shihipar's
-`next-steps` plugin (MIT). See `NOTICE`.
+[next-steps](https://github.com/anthropics/claude-plugins-community/tree/main/next-steps) plugin (MIT). See `NOTICE`.
